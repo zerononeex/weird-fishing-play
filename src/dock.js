@@ -63,8 +63,9 @@ function drawScene(ctx, t, night, zone, pose = 'idle') {
       ctx.beginPath(); ctx.arc(cx, y, 24 * s, 0, Math.PI * 2); ctx.arc(cx + 26 * s, y + 6, 18 * s, 0, Math.PI * 2); ctx.arc(cx - 24 * s, y + 7, 16 * s, 0, Math.PI * 2); ctx.fill();
     }
   }
-  ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  for (let i = 0; i < 6; i++) { const x = (i * 97 + t * 8) % W; ctx.fillRect(x, Math.max(wy + 10, sy), 3, H); }
+  // (v1.2.1: the old code-drawn "sparkle streaks" — six 3px full-height bars from the
+  // pre-art era — read as printed vertical stripes over the painted sea art. Removed;
+  // the art already has light rays painted in.)
   // idle fish from this zone
   const pool = SPECIES.filter((s) => s.zone === zone.id && s.rarity !== 'boss' && !s.cond.length);
   for (let i = 0; i < 5; i++) {
