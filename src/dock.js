@@ -153,7 +153,10 @@ function buoys(ctx, t) {
     }, silent: true });
     ctx.save(); ctx.translate(x, y0 + bob);
     ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 30); ctx.lineTo(0, 90); ctx.stroke();
-    if (on) { ctx.fillStyle = 'rgba(255,230,102,0.35)'; ctx.beginPath(); ctx.arc(0, 0, 52, 0, TAU); ctx.fill(); }
+    if (on) { // v1.2.2: softer selected-zone marker (the old 0.35 yellow disc read as a yellow blob on the calm water)
+      ctx.fillStyle = 'rgba(255,244,180,0.20)'; ctx.beginPath(); ctx.arc(0, 0, 52, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,209,102,0.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 52, 0, TAU); ctx.stroke();
+    }
     if (!drawArt(ctx, `ui/buoy_${z.key}.png`, -40, -48, 80, 96)) {
       ctx.fillStyle = open ? ['#ff5a5f', '#7b8cde', '#4cc9f0', '#9d4edd'][i] : '#8d99ae';
       ctx.beginPath(); ctx.ellipse(0, 0, 32, 36, 0, 0, TAU); ctx.fill();
