@@ -3,6 +3,7 @@ import { CONFIG } from './config.js';
 import { ui } from './ui.js';
 import { art, drawArt } from './art.js';
 import { ANCHOR } from './icons.js';
+import { sawHeld } from './input.js';
 
 const { W, H } = CONFIG;
 export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -89,24 +90,30 @@ export function drawArrows(ctx, input) {
   }
 }
 
-// Big SAW button (hold): a spinning blade that lights up while held.
+// Big SAW button (v1.2: tap toggles). Lit while the saw runs; a latched saw gets a bold ring + "ON".
 export function drawSawButton(ctx, input, t) {
   const b = ui.buttons.find((b) => b.saw);
   if (!b) return;
-  const on = input.saw.size > 0, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  const on = sawHeld(input), latched = input.sawLatch, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
   if (drawArt(ctx, 'ui/btn_saw.png', b.x, b.y, b.w, b.h)) {
     if (on) { ctx.fillStyle = 'rgba(255,159,28,0.45)'; ctx.beginPath(); ctx.arc(cx, cy, b.w / 2, 0, Math.PI * 2); ctx.fill(); }
-    return;
+  } else {
+    ctx.fillStyle = on ? 'rgba(255,159,28,0.9)' : 'rgba(255,255,255,0.28)';
+    ctx.beginPath(); ctx.arc(cx, cy, b.w / 2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.save(); ctx.translate(cx, cy - 8); ctx.rotate(on ? t * 25 : 0);
+    ctx.fillStyle = on ? '#5a3b00' : '#fff';
+    for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(16, -6); ctx.lineTo(28, 0); ctx.lineTo(16, 6); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    text(ctx, 'SAW', cx, cy + 32, 20, on ? '#5a3b00' : '#fff');
   }
-  ctx.fillStyle = on ? 'rgba(255,159,28,0.9)' : 'rgba(255,255,255,0.28)';
-  ctx.beginPath(); ctx.arc(cx, cy, b.w / 2, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 4; ctx.stroke();
-  ctx.save(); ctx.translate(cx, cy - 8); ctx.rotate(on ? t * 25 : 0);
-  ctx.fillStyle = on ? '#5a3b00' : '#fff';
-  for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(14, -5); ctx.lineTo(24, 0); ctx.lineTo(14, 5); ctx.fill(); }
-  ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  text(ctx, 'SAW', cx, cy + 28, 18, on ? '#5a3b00' : '#fff');
+  if (latched) { // the toggled-on state: a pulsing ring and an ON tag
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 6 + Math.sin(t * 8) * 2;
+    ctx.beginPath(); ctx.arc(cx, cy, b.w / 2 + 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#e63946'; rr(ctx, cx - 26, b.y - 22, 52, 28, 12); ctx.fill();
+    text(ctx, 'ON', cx, b.y - 8, 18, '#fff');
+  }
 }
 
 // Boat + fisher at the surface. pose 'cast' swings the rod forward. Art slots: dock/boat.png,

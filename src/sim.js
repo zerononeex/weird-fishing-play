@@ -10,8 +10,8 @@ export const LINES = [50, 100, 200, 300, 500, 700, Infinity];
 
 export function createLure() { return { x: CONFIG.W / 2, vx: 0 }; }
 
-export function steer(lure, tilt, dt) {
-  lure.vx += (tilt * PHYS.MAX_VX - lure.vx) * (1 - Math.exp(-dt / PHYS.TAU));
+export function steer(lure, tilt, dt, mul = 1) {
+  lure.vx += (tilt * PHYS.MAX_VX * mul - lure.vx) * (1 - Math.exp(-dt / PHYS.TAU));
   lure.x += lure.vx * dt;
   if (lure.x < PHYS.X_MIN) { lure.x = PHYS.X_MIN; lure.vx = 0; }
   if (lure.x > PHYS.X_MAX) { lure.x = PHYS.X_MAX; lure.vx = 0; }
@@ -35,13 +35,13 @@ export function createRun({ lineLength = 50, startDepth = 0 } = {}) {
 // Advances depth; returns 'maxDepth' or 'surface' when the run hits an end, else null.
 export function moveRun(run, dt, tilt) {
   run.t += dt;
-  steer(run.lure, tilt, dt);
+  steer(run.lure, tilt, dt, run.mode === 'ascent' ? CONFIG.ASCENT_STEER_MULT : 1);
   if (run.mode === 'descent') {
     run.depth += PHYS.SINK * run.sinkMul * dt;
     run.maxReached = Math.max(run.maxReached, Math.min(run.depth, run.lineLength));
     if (run.depth >= run.lineLength - 1e-9) { run.depth = run.lineLength; return 'maxDepth'; }
   } else if (run.mode === 'ascent') {
-    run.depth -= PHYS.REEL * run.reelMul * dt;
+    run.depth -= PHYS.REEL * CONFIG.REEL_RISE_MULT * run.reelMul * dt;
     if (run.depth <= 1e-9) { run.depth = 0; return 'surface'; }
   }
   return null;

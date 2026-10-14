@@ -13,14 +13,20 @@ import { drawSea, drawLure, drawLine, drawArrows, drawSawButton, text, lerpRgb, 
 import { createShoot, stepShoot, toScreen, SHOOT } from './shoot.js';
 import { GUN, ITEM } from './data/shop.js';
 import { wearDrawer, drawItemIcon } from './icons.js';
-import { art, drawArt } from './art.js';
+import { art, drawArt, fadedArt } from './art.js';
 import { sfx, sawLoop } from './audio.js';
 import { burst, popup, quake, drawFx, clearFx } from './fx.js';
 import { fishPay } from './economy.js';
-import { input } from './input.js';
+import { input, sawHeld } from './input.js';
+import { KNIFE_BTN } from './ui.js';
 
 const { W, H, PX_PER_M } = CONFIG;
 const CAST_S = 0.8, TURN_S = 0.5;
+// v1.2: the cast moment sits 64 px lower (surface line lower on screen), then eases up to the dive position.
+export const CAST_DROP = 64;
+// cast_top (art #146): the sea surface sits at this fraction of the image height (wave band 0.375–0.57).
+export const CAST_TOP = { SURFACE: 0.44, FADE: 240, NIGHT: 'rgba(5,15,45,0.5)' };
+export const castTopDrawn = { at: -1 }; // smoke: screen y of the image top on the last frame it was drawn (-1: not drawn)
 let timer = 0, lureY = H * PHYS.LURE_Y_DESCENT;
 
 let spawner = null;
@@ -41,7 +47,8 @@ export function startRun(opts) {
   placeGuaranteed(G.run, zone, allowed);
   spawnTo(G.run, spawner, G.run.depth + AHEAD);
   placeBoss(zone, allowed);
-  lureY = H * PHYS.LURE_Y_DESCENT;
+  lureY = H * PHYS.LURE_Y_DESCENT + CAST_DROP;
+  input.sawLatch = false;       // the SAW toggle starts off every dive
 }
 
 // The zone boss (or its post-game replacement) waits at the very bottom when the line reaches it.
@@ -54,9 +61,10 @@ function placeBoss(zone, allowed) {
 
 function knifeButton(ctx) {
   if (!G.run.knife) return;
-  addButton({ x: W - 96, y: 24, w: 76, h: 76, onTap: () => { sfx.knife(); sawLoop(false); G.go('knife'); }, silent: true, label: 'KNIFE' });
-  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(W - 58, 62, 36, 0, Math.PI * 2); ctx.fill();
-  ctx.save(); ctx.translate(W - 58, 62); ctx.rotate(-0.7);
+  const k = KNIFE_BTN, cx = W - 20 - k / 2, cy = 24 + k / 2;
+  addButton({ x: W - 20 - k, y: 24, w: k, h: k, onTap: () => { sfx.knife(); sawLoop(false); G.go('knife'); }, silent: true, label: 'KNIFE' });
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(cx, cy, k / 2 - 2, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(k / 76, k / 76); ctx.rotate(-0.7);
   ctx.fillStyle = '#e8eef3'; ctx.beginPath(); ctx.moveTo(-4, -26); ctx.lineTo(6, -26); ctx.lineTo(4, 6); ctx.lineTo(-4, 6); ctx.fill();
   ctx.fillStyle = '#8b5a2b'; ctx.fillRect(-5, 6, 10, 20);
   ctx.restore();
@@ -143,13 +151,32 @@ function drawSchool(ctx, run, t, glow) {
   }
 }
 
+// Above-water art (v1.2): sky + wave surface + shallow water as the top segment over the zone sea.
+// It scrolls 1:1 with the surface, and its lower FADE px blend into the zone background.
+function castTop(ctx, surfY, night) {
+  castTopDrawn.at = -1;
+  const im = art('bg/cast_top.png');
+  if (!im) return false;
+  const h = (W * im.naturalHeight) / im.naturalWidth, top = surfY - h * CAST_TOP.SURFACE, bottom = top + h;
+  if (bottom <= 0) return true;
+  ctx.drawImage(fadedArt('bg/cast_top.png', CAST_TOP.FADE / h), 0, top, W, h);
+  if (night) { // same darkening as the other backgrounds at night, fading out with the image
+    const g = ctx.createLinearGradient(0, bottom - CAST_TOP.FADE, 0, bottom);
+    g.addColorStop(0, CAST_TOP.NIGHT); g.addColorStop(1, 'rgba(5,15,45,0)');
+    ctx.fillStyle = CAST_TOP.NIGHT; ctx.fillRect(0, top, W, h - CAST_TOP.FADE);
+    ctx.fillStyle = g; ctx.fillRect(0, bottom - CAST_TOP.FADE, W, CAST_TOP.FADE);
+  }
+  castTopDrawn.at = top;
+  return true;
+}
+
 export function renderWorld(ctx, t) {
   const run = G.run;
   let [top, bottom] = seaColors(run.zone, run.depth);
   if (run.night) { top = top.map((c) => c * 0.45); bottom = bottom.map((c) => c * 0.6); }
   drawSea(ctx, top, bottom, run.depth * PX_PER_M, t, run.zone.bg);
   const surfY = screenY(run, 0, lureY);
-  if (surfY > -40) {
+  if (!castTop(ctx, surfY, run.night) && surfY > -40) {
     ctx.fillStyle = '#bfefff'; ctx.fillRect(0, 0, W, Math.max(0, surfY));
     ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(0, surfY - 4, W, 6);
   }
@@ -175,7 +202,7 @@ const play = {
   update(dt) {
     spawnTo(G.run, spawner, G.run.depth + AHEAD);
     moveFish(G.run, dt);
-    sawStep(G.run, dt, input.saw.size > 0);
+    sawStep(G.run, dt, sawHeld(input));
     magnetStep(G.run, dt);
     stepBolts(dt);
     const ev = moveRun(G.run, dt, getTilt()) || contact(G.run);

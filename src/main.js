@@ -55,7 +55,7 @@ canvas.addEventListener('pointermove', (e) => {
   const st = pointers.get(e.pointerId); if (!st) return;
   const p = toLogical(e);
   if (st.scene) sceneNow().pointerMove?.(p, e);
-  else routeMove(input, 'p' + e.pointerId, st, p, e.timeStamp);
+  else routeMove(input, 'p' + e.pointerId, st, p);
 });
 const up = (e) => {
   const st = pointers.get(e.pointerId); if (!st) return;

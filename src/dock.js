@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { G } from './game.js';
 import { addButton } from './ui.js';
 import { text, rr, drawBoat, lerpRgb } from './draw.js';
-import { art, drawArt } from './art.js';
+import { art, drawArt, fadedArt } from './art.js';
 import { wearDrawer, drawItemIcon } from './icons.js';
 import { drawFish } from './fishart.js';
 import { startRun } from './play.js';
@@ -16,7 +16,11 @@ import { zoneUnlocked, lockReason, refreshUnlocks, gearOf, grantGifts, owns, equ
 import { sfx } from './audio.js';
 
 const { W, H } = CONFIG;
-export const DOCK = { WATER: 330, BOAT_X: 270, BOAT_SCALE: 1.35, CAST_DELAY: 0.4 };
+// v1.2: WATER 330 -> 394 (boat + fisher 64 px lower, clear of the bigger HUD); BUOY_Y follows.
+export const DOCK = { WATER: 394, BOAT_X: 270, BOAT_SCALE: 1.35, CAST_DELAY: 0.4, BUOY_Y: 494, HUD_H: 196 };
+// dock_bg art (v1.2, waves baked in): the row of each image where the boat's waterline sits, and how far
+// right the cover-crop leans (keeps the sun / moon in view). The image is scaled so that row lands on WATER.
+export const DOCK_BG = { day: { file: 'dock/dock_bg.png', water: 0.85 }, night: { file: 'dock/dock_bg_night.png', water: 0.82 }, ANCHOR_X: 0.75, BLEND: 40 };
 const money = (n) => '$' + Math.round(n).toLocaleString();
 const dock = { panel: null, casting: 0, msg: '', msgT: 0 };
 
@@ -27,10 +31,25 @@ export function castFromDock() {
   G.go('cast');
 }
 
-// ---- the scene: sky, sun/moon, clouds, sea band, waves, boat ----
+// ---- the scene: the zone's underwater art, dock_bg (sky, island, baked foam waves) over its top, boat ----
 function drawScene(ctx, t, night, zone, pose = 'idle') {
-  const wy = DOCK.WATER;
-  if (!drawArt(ctx, night ? 'dock/dock_bg_night.png' : 'dock/dock_bg.png', 0, 0, W, wy + 6)) {
+  const wy = DOCK.WATER, bg = night ? DOCK_BG.night : DOCK_BG.day, bgIm = art(bg.file);
+  // dock_bg is scaled so its waterline row lands on WATER; its bottom BLEND px fade into the zone sea below
+  const bh = DOCK.WATER / bg.water, sy = bgIm ? bh - DOCK_BG.BLEND : wy;
+  const [top, bottom] = [zone.sea[0], lerpRgb(zone.sea[0], zone.sea[1], 0.8)].map((c) => (night ? c.map((v) => v * 0.5) : c));
+  const seaImg = art(zone.bg);
+  if (seaImg) {
+    ctx.drawImage(seaImg, 0, sy, W, (W * seaImg.naturalHeight) / seaImg.naturalWidth);
+    if (night) { ctx.fillStyle = 'rgba(5,15,45,0.5)'; ctx.fillRect(0, sy, W, H - sy); }
+  } else {
+    const sea = ctx.createLinearGradient(0, sy, 0, H);
+    sea.addColorStop(0, `rgb(${top})`); sea.addColorStop(1, `rgb(${bottom})`);
+    ctx.fillStyle = sea; ctx.fillRect(0, sy, W, H - sy);
+  }
+  if (bgIm) {
+    const bw = (bh * bgIm.naturalWidth) / bgIm.naturalHeight;
+    ctx.drawImage(fadedArt(bg.file, DOCK_BG.BLEND / bh), -(bw - W) * DOCK_BG.ANCHOR_X, 0, bw, bh);
+  } else {
     const g = ctx.createLinearGradient(0, 0, 0, wy);
     g.addColorStop(0, night ? '#0b1d3a' : '#5ec4f5'); g.addColorStop(1, night ? '#2d4a86' : '#d8f3ff');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, wy);
@@ -39,41 +58,25 @@ function drawScene(ctx, t, night, zone, pose = 'idle') {
       ctx.globalAlpha = 1; ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(445, 215, 30, 0, Math.PI * 2); ctx.fill();
     } else { ctx.fillStyle = '#ffe066'; ctx.beginPath(); ctx.arc(445, 215, 36, 0, Math.PI * 2); ctx.fill(); }
     ctx.fillStyle = night ? 'rgba(200,210,255,0.25)' : 'rgba(255,255,255,0.9)';
-    for (const [x, y, s] of [[80, 200, 1], [330, 175, 0.8], [560, 250, 1.1]]) {
+    for (const [x, y, s] of [[80, 240, 1], [330, 255, 0.8], [560, 300, 1.1]]) {
       const cx = ((x + t * 10 * s) % (W + 160)) - 80;
       ctx.beginPath(); ctx.arc(cx, y, 24 * s, 0, Math.PI * 2); ctx.arc(cx + 26 * s, y + 6, 18 * s, 0, Math.PI * 2); ctx.arc(cx - 24 * s, y + 7, 16 * s, 0, Math.PI * 2); ctx.fill();
     }
   }
-  // underwater, tinted by the chosen zone
-  const [top, bottom] = [zone.sea[0], lerpRgb(zone.sea[0], zone.sea[1], 0.8)].map((c) => (night ? c.map((v) => v * 0.5) : c));
-  const seaImg = art(zone.bg);
-  if (seaImg) {
-    ctx.drawImage(seaImg, 0, wy, W, (W * seaImg.naturalHeight) / seaImg.naturalWidth);
-    if (night) { ctx.fillStyle = 'rgba(5,15,45,0.5)'; ctx.fillRect(0, wy, W, H - wy); }
-  } else {
-    const sea = ctx.createLinearGradient(0, wy, 0, H);
-    sea.addColorStop(0, `rgb(${top})`); sea.addColorStop(1, `rgb(${bottom})`);
-    ctx.fillStyle = sea; ctx.fillRect(0, wy, W, H - wy);
-  }
   ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  for (let i = 0; i < 6; i++) { const x = (i * 97 + t * 8) % W; ctx.fillRect(x, wy + 10, 3, H); }
+  for (let i = 0; i < 6; i++) { const x = (i * 97 + t * 8) % W; ctx.fillRect(x, Math.max(wy + 10, sy), 3, H); }
   // idle fish from this zone
   const pool = SPECIES.filter((s) => s.zone === zone.id && s.rarity !== 'boss' && !s.cond.length);
   for (let i = 0; i < 5; i++) {
     const sp = pool[(i * 5) % pool.length], dir = i % 2 ? -1 : 1, span = W + 120;
     const x = ((((t * (22 + i * 7) * dir + i * 170) % span) + span) % span) - 60;
-    drawFish(ctx, sp, x, 640 + i * 62 + Math.sin(t + i) * 6, Math.min(sp.r, 24), dir, t);
+    drawFish(ctx, sp, x, DOCK.BUOY_Y + 210 + i * 52 + Math.sin(t + i) * 6, Math.min(sp.r, 24), dir, t);
   }
   ctx.save(); ctx.translate(DOCK.BOAT_X, wy + 4); ctx.scale(DOCK.BOAT_SCALE, DOCK.BOAT_SCALE); // big target for small fingers
   drawBoat(ctx, 0, 0, t, G.slot.color, wearDrawer(G.slot.equip),
     G.slot.flags.bossBeaten ? (c) => drawFish(c, SPECIES[46], -44, -40, 16, -1, t) : null, pose);
   ctx.restore();
-  // wave strip over the hull
-  const wave = art('dock/wave_strip.png');
-  if (wave) { // tile the strip at its own aspect, drifting slowly
-    const ww = 150, wh = (ww * wave.naturalHeight) / wave.naturalWidth;
-    for (let x = -((t * 20) % ww); x < W; x += ww) ctx.drawImage(wave, x, wy + 18 - wh * 0.5, ww, wh);
-  } else {
+  if (!bgIm) { // code-drawn surface line only without dock_bg art (v1.2: the art has its waves baked in)
     ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 4; ctx.beginPath();
     for (let x = 0; x <= W; x += 10) ctx.lineTo(x, wy + 6 + Math.sin(x * 0.045 + t * 2) * 4);
     ctx.stroke();
@@ -97,11 +100,11 @@ function hudButton(ctx, x, y, w, h, label, glyph, onTap, opts = {}) {
   ctx.fillStyle = opts.on ? 'rgba(255,209,102,0.92)' : 'rgba(255,255,255,0.82)';
   rr(ctx, x, y, w, h, 16); ctx.fill();
   ctx.strokeStyle = 'rgba(0,30,50,0.3)'; ctx.lineWidth = 3; ctx.stroke();
-  const cx = x + w / 2, cy = y + h / 2 - 6;
-  if (opts.draw) opts.draw(cx, cy);
-  else if (!drawArt(ctx, `ui/hud_${glyph}.png`, cx - 22, cy - 22, 44, 44)) { ctx.save(); ctx.translate(cx, cy); GLYPH[glyph](ctx); ctx.restore(); }
-  if (opts.off) { ctx.strokeStyle = '#e63946'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx - 18, cy + 16); ctx.lineTo(cx + 18, cy - 16); ctx.stroke(); }
-  text(ctx, opts.caption || '', cx, y + h - 11, 12, '#123', 'center', 'bold');
+  const cx = x + w / 2, cy = y + h / 2 - 8, k = HUD.ICON / 44;   // v1.2: icons 44 -> 54 px, captions 12 -> 15 px
+  if (opts.draw) { ctx.save(); ctx.translate(cx, cy); ctx.scale(k, k); opts.draw(0, 0); ctx.restore(); }
+  else if (!drawArt(ctx, `ui/hud_${glyph}.png`, cx - HUD.ICON / 2, cy - HUD.ICON / 2, HUD.ICON, HUD.ICON)) { ctx.save(); ctx.translate(cx, cy); ctx.scale(k, k); GLYPH[glyph](ctx); ctx.restore(); }
+  if (opts.off) { ctx.strokeStyle = '#e63946'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(cx - 22, cy + 20); ctx.lineTo(cx + 22, cy - 20); ctx.stroke(); }
+  text(ctx, opts.caption || '', cx, y + h - 13, 15, '#123', 'center', 'bold');
 }
 
 function kidFace(ctx, slotIndex, color, x, y, r) {
@@ -113,15 +116,18 @@ function kidFace(ctx, slotIndex, color, x, y, r) {
   ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y + 5, 6, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
 }
 
+// v1.2: the bar is ~1.25x bigger (owner: too small for the kids). Every button is >= 64 px.
+export const HUD = { BAR: 196, ICON: 54, KIDS: [96, 76], ROW_Y: 106, ROW_H: 88, ROW_W: 80 };
 function hud(ctx) {
   const slot = G.slot, st = slot.settings, charm = charmOf(slot);
-  addButton({ x: 8, y: 8, w: W - 16, h: 156, label: 'HUD', onTap: () => {}, silent: true }); // gaps in the bar never cast
-  ctx.fillStyle = 'rgba(0,40,70,0.35)'; rr(ctx, 8, 8, W - 16, 156, 20); ctx.fill();
-  kidFace(ctx, G.data.activeSlot, slot.color, 46, 46, 28);
-  text(ctx, slot.name, 86, 32, 22, '#fff', 'left');
-  const coin = drawArt(ctx, 'fx/coin.png', 86, 48, 28, 28) ? 34 : 0;
-  text(ctx, money(slot.cash), 86 + coin, 62, 26, '#ffe066', 'left');
-  hudButton(ctx, W - 92, 16, 76, 60, 'KIDS', 'kids', () => { sfx.open(); G.go('back'); }, { caption: 'Kids', silent: true });
+  addButton({ x: 8, y: 8, w: W - 16, h: HUD.BAR, label: 'HUD', onTap: () => {}, silent: true }); // gaps in the bar never cast
+  ctx.fillStyle = 'rgba(0,40,70,0.35)'; rr(ctx, 8, 8, W - 16, HUD.BAR, 22); ctx.fill();
+  kidFace(ctx, G.data.activeSlot, slot.color, 52, 54, 35);
+  text(ctx, slot.name, 100, 36, 28, '#fff', 'left');
+  const coin = drawArt(ctx, 'fx/coin.png', 100, 56, 36, 36) ? 42 : 0;
+  text(ctx, money(slot.cash), 100 + coin, 75, 32, '#ffe066', 'left');
+  const [kw, kh] = HUD.KIDS;
+  hudButton(ctx, W - 16 - kw, 16, kw, kh, 'KIDS', 'kids', () => { sfx.open(); G.go('back'); }, { caption: 'Kids', silent: true });
   const row = [
     ['SHOP', 'shop', () => { sfx.open(); G.go('shop'); }, { caption: 'Shop', silent: true }],
     ['FISH BOOK', 'book', () => { sfx.open(); G.go('dex'); }, { caption: 'Book', silent: true }],
@@ -131,13 +137,13 @@ function hud(ctx) {
     ['MUSIC', 'music', () => { st.musicMuted = !st.musicMuted; G.persist(); }, { caption: 'Music', off: st.musicMuted }],
     ['SOUND', 'sound', () => { st.muted = !st.muted; G.persist(); }, { caption: 'Sound', off: st.muted }],
   ];
-  const bw = 80, gap = (W - 32 - row.length * bw) / (row.length - 1);
-  row.forEach(([label, glyph, tap, opts], i) => hudButton(ctx, 16 + i * (bw + gap), 88, bw, 68, label, glyph, tap, opts));
+  const bw = HUD.ROW_W, gap = (W - 32 - row.length * bw) / (row.length - 1);
+  row.forEach(([label, glyph, tap, opts], i) => hudButton(ctx, 16 + i * (bw + gap), HUD.ROW_Y, bw, HUD.ROW_H, label, glyph, tap, opts));
 }
 
 // ---- zone buoys ----
 function buoys(ctx, t) {
-  const slot = G.slot, y0 = 430;
+  const slot = G.slot, y0 = DOCK.BUOY_Y;
   ZONES.forEach((z, i) => {
     const x = 67.5 + i * 135, open = zoneUnlocked(slot, z), on = slot.zone === z.id, bob = Math.sin(t * 2 + i) * 4;
     addButton({ x: x - 60, y: y0 - 70, w: 120, h: 150, label: 'zone' + z.id, onTap: () => {
@@ -164,7 +170,7 @@ function buoys(ctx, t) {
   const z = ZONES[slot.zone - 1];
   const info = dock.msgT > 0 ? dock.msg
     : Number.isFinite(z.maxDepth) ? `${z.name} · ${z.maxDepth} m deep · best ${slot.bestDepth[z.id] || 0} m` : `${z.name} · endless! · best ${slot.bestDepth[4] || 0} m`;
-  text(ctx, info, W / 2, 572, 20, dock.msgT > 0 ? '#ffd6a5' : '#e0f2ff');
+  text(ctx, info, W / 2, y0 + 142, 20, dock.msgT > 0 ? '#ffd6a5' : '#e0f2ff');
 }
 
 // ---- charm picker panel ----
@@ -213,13 +219,13 @@ G.scenes.dock = {
     };
     // cast targets first (lowest priority): the whole scene, then the boat + fisher; buoys + HUD go on top
     addButton({ x: 0, y: 0, w: W, h: H, label: 'CAST_ANY', onTap: tryCast, silent: true });
-    addButton({ x: DOCK.BOAT_X - 120, y: 170, w: 240, h: DOCK.WATER + 30 - 170, label: 'CAST', onTap: tryCast, silent: true });
+    addButton({ x: DOCK.BOAT_X - 120, y: DOCK.HUD_H + 38, w: 240, h: DOCK.WATER + 30 - (DOCK.HUD_H + 38), label: 'CAST', onTap: tryCast, silent: true });
     drawScene(ctx, t, slot.settings.night, zone, dock.casting > 0 ? 'cast' : 'idle');
     if (!slot.flags.hasCast && !dock.casting) {   // pulsing hint bubble until the first cast
-      const k = 1 + Math.sin(t * 5) * 0.06, bx = DOCK.BOAT_X - 150, by = 178;
+      const k = 1 + Math.sin(t * 5) * 0.06, bx = DOCK.BOAT_X - 200, by = DOCK.HUD_H + 46;
       ctx.save(); ctx.translate(bx + 70, by + 22); ctx.scale(k, k); ctx.translate(-(bx + 70), -(by + 22));
       ctx.fillStyle = '#fff'; rr(ctx, bx, by, 140, 44, 20); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(bx + 100, by + 42); ctx.lineTo(bx + 116, by + 62); ctx.lineTo(bx + 120, by + 40); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(bx + 100, by + 42); ctx.lineTo(bx + 126, by + 62); ctx.lineTo(bx + 120, by + 40); ctx.fill();
       text(ctx, 'tap to cast!', bx + 70, by + 22, 20, '#1b4965');
       ctx.restore();
     }
