@@ -45,9 +45,15 @@ function drawScene(ctx, t, night, zone, pose = 'idle') {
   }
   // underwater, tinted by the chosen zone
   const [top, bottom] = [zone.sea[0], lerpRgb(zone.sea[0], zone.sea[1], 0.8)].map((c) => (night ? c.map((v) => v * 0.5) : c));
-  const sea = ctx.createLinearGradient(0, wy, 0, H);
-  sea.addColorStop(0, `rgb(${top})`); sea.addColorStop(1, `rgb(${bottom})`);
-  ctx.fillStyle = sea; ctx.fillRect(0, wy, W, H - wy);
+  const seaImg = art(zone.bg);
+  if (seaImg) {
+    ctx.drawImage(seaImg, 0, wy, W, (W * seaImg.naturalHeight) / seaImg.naturalWidth);
+    if (night) { ctx.fillStyle = 'rgba(5,15,45,0.5)'; ctx.fillRect(0, wy, W, H - wy); }
+  } else {
+    const sea = ctx.createLinearGradient(0, wy, 0, H);
+    sea.addColorStop(0, `rgb(${top})`); sea.addColorStop(1, `rgb(${bottom})`);
+    ctx.fillStyle = sea; ctx.fillRect(0, wy, W, H - wy);
+  }
   ctx.fillStyle = 'rgba(255,255,255,0.10)';
   for (let i = 0; i < 6; i++) { const x = (i * 97 + t * 8) % W; ctx.fillRect(x, wy + 10, 3, H); }
   // idle fish from this zone
@@ -62,7 +68,11 @@ function drawScene(ctx, t, night, zone, pose = 'idle') {
     G.slot.flags.bossBeaten ? (c) => drawFish(c, SPECIES[46], -44, -40, 16, -1, t) : null, pose);
   ctx.restore();
   // wave strip over the hull
-  if (!drawArt(ctx, 'dock/wave_strip.png', -((t * 30) % 60), wy - 8, W + 60, 32)) {
+  const wave = art('dock/wave_strip.png');
+  if (wave) { // tile the strip at its own aspect, drifting slowly
+    const ww = 150, wh = (ww * wave.naturalHeight) / wave.naturalWidth;
+    for (let x = -((t * 20) % ww); x < W; x += ww) ctx.drawImage(wave, x, wy + 18 - wh * 0.5, ww, wh);
+  } else {
     ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 4; ctx.beginPath();
     for (let x = 0; x <= W; x += 10) ctx.lineTo(x, wy + 6 + Math.sin(x * 0.045 + t * 2) * 4);
     ctx.stroke();

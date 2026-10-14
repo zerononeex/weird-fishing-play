@@ -2,7 +2,8 @@ import { CONFIG } from './config.js';
 import { input, step as stepInput, routeDown, routeMove, routeUp, releaseAll, bindKeys } from './input.js';
 import { ui, beginFrame, hitButton } from './ui.js';
 import { G } from './game.js';
-import { unlock, setMuted, sfx, audioState, pauseAudio, music, musicNow } from './audio.js';
+import { unlock, setMuted, sfx, audioState, pauseAudio, music, musicNow, sfxStats } from './audio.js';
+import { artStats } from './art.js';
 import { musicFor } from './musicmap.js';
 import { updateFx, shake } from './fx.js';
 import './play.js';
@@ -107,7 +108,7 @@ requestAnimationFrame(frame);
 
 // test hook for the smoke test
 window.__wf = {
-  W, H, get scale() { return scale; }, G, ui, freeze: false, audioState, musicNow, frameMs,
+  W, H, get scale() { return scale; }, G, ui, freeze: false, audioState, musicNow, sfxStats, artStats, frameMs,
   lum() { // mean luminance of the canvas, 0..255
     const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let s = 0; for (let i = 0; i < d.length; i += 16) s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];

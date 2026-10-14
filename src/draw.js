@@ -28,9 +28,12 @@ export function lerpRgb(a, b, t) { return [mix(a[0], b[0], t), mix(a[1], b[1], t
 // Underwater background; `scroll` is the world offset in px so the bubbles/streaks move with depth.
 export function drawSea(ctx, top, bottom, scroll, t, bg = null) {
   const im = bg && art(bg);
-  if (im) { // tall full-bleed art scrolls slowly with depth (wraps)
-    const h = (W * im.naturalHeight) / im.naturalWidth, off = ((scroll * 0.25) % h + h) % h;
-    ctx.drawImage(im, 0, -off, W, h); if (h - off < H) ctx.drawImage(im, 0, h - off, W, h);
+  if (im) { // tall full-bleed art scrolls slowly with depth; every other tile is mirrored so the seams match
+    const h = (W * im.naturalHeight) / im.naturalWidth, pos = scroll * 0.25, first = Math.floor(pos / h);
+    for (let i = first, y = first * h - pos; y < H; i++, y += h) {
+      if (i % 2 === 0) ctx.drawImage(im, 0, y, W, h);
+      else { ctx.save(); ctx.translate(0, y + h); ctx.scale(1, -1); ctx.drawImage(im, 0, 0, W, h); ctx.restore(); }
+    }
     ctx.fillStyle = `rgba(${bottom},${Math.min(0.75, scroll / 9000)})`; ctx.fillRect(0, 0, W, H); // darken with depth
   } else {
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -111,7 +114,7 @@ export function drawSawButton(ctx, input, t) {
 export function drawBoat(ctx, x, y, t, color = '#ff6b9a', wear = null, buddy = null, pose = 'idle') {
   ctx.save(); ctx.translate(x, y + Math.sin(t * 2) * 3); ctx.rotate(Math.sin(t * 1.3) * 0.03);
   const boatImg = art('dock/boat.png'), fisherImg = art(pose === 'cast' ? 'dock/fisher_cast.png' : 'dock/fisher_idle.png');
-  if (fisherImg) { ctx.drawImage(fisherImg, -80, -150, 160, 160); wear?.(ctx, ANCHOR.ART); }
+  if (fisherImg) { ctx.drawImage(fisherImg, ...ANCHOR.ART.box); wear?.(ctx, ANCHOR.ART); }
   else {
     ctx.fillStyle = color; rr(ctx, -16, -62, 32, 40, 10); ctx.fill();
     ctx.fillStyle = '#ffd7b5'; ctx.beginPath(); ctx.arc(0, -76, 16, 0, Math.PI * 2); ctx.fill();
@@ -123,7 +126,7 @@ export function drawBoat(ctx, x, y, t, color = '#ff6b9a', wear = null, buddy = n
     if (pose === 'cast') ctx.lineTo(95, -70); else ctx.lineTo(60, -110);
     ctx.stroke();
   }
-  if (boatImg) ctx.drawImage(boatImg, -100, -40, 200, 100);
+  if (boatImg) ctx.drawImage(boatImg, ...ANCHOR.ART.boat);
   else {
     ctx.fillStyle = '#e76f51'; ctx.beginPath(); ctx.moveTo(-70, -22); ctx.lineTo(70, -22); ctx.lineTo(50, 10); ctx.lineTo(-50, 10); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#f4a261'; ctx.fillRect(-70, -26, 140, 8);

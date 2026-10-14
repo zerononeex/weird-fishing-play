@@ -220,6 +220,7 @@ export function music(key) {
 }
 
 export const audioState = () => (ac ? ac.state : 'off');
+export const sfxStats = () => ({ decoded: buffers.size, failed: [...failed] });
 export const musicNow = () => current && { key: current.key, file: !!current.inner?.el && !failed.has(current.key) };
 
 // Page hidden (app switch, lock screen): silence everything until the kids come back.

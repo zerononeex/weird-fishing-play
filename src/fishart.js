@@ -258,8 +258,8 @@ export const fishArtPath = (sp) => `fish/fish_${String(sp.id).padStart(2, '0')}.
 export function drawFish(ctx, sp, x, y, r, dir, t, opts = {}) {
   if (opts.silhouette) return drawSilhouette(ctx, sp, x, y, r, dir);
   const im = art(fishArtPath(sp));
-  if (im) { // sprite art faces right; the body spans ~2.6 r wide, with a little wobble
-    const w = r * 2.8, h = (w * im.naturalHeight) / im.naturalWidth;
+  if (im) { // sprite art faces right; its longest side spans ~2.8 r, with a little wobble
+    const k = (r * 2.8) / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
     ctx.save(); ctx.translate(x, y); ctx.scale(dir < 0 ? -1 : 1, 1); ctx.rotate(Math.sin(t * 6 + sp.id) * 0.05);
     ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore();
     return;

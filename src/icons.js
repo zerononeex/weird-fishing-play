@@ -35,7 +35,8 @@ function star(c, x, y, r, f) {
 // Where hats/outfits sit on the fisher. CODE = the code-drawn fisher; ART = the Act 2 sprite (tuned on import).
 export const ANCHOR = {
   CODE: { head: [0, -78], hatScale: 1, body: [0, 0], bodyScale: 1 },
-  ART: { head: [0, -105], hatScale: 1.25, body: [0, -30], bodyScale: 1.25 },
+  // box/boat: where the 480×320 fisher sprite and the 400×200 hull sprite are drawn (logical px, boat origin)
+  ART: { box: [-120, -170, 240, 160], boat: [-100, -62, 200, 100], head: [-14, -82], hatScale: 2, body: [-4, 31], bodyScale: 1.3 },
 };
 
 // Draws hat + outfit for drawBoat's wear callback.

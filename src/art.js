@@ -5,11 +5,12 @@ import { ART } from './manifest.js';
 const present = new Set(ART);
 const imgs = new Map();
 
-// path is relative to assets/art/, e.g. 'fish/fish_01.png'. Returns a ready Image or null.
+// path is the slot id from docs/ASSET_PROMPTS.md, relative to assets/art/, e.g. 'fish/fish_01.png'.
+// The site ships the normalized, compressed version of that slot as .webp. Returns a ready Image or null.
 export function art(path) {
   if (!present.has(path)) return null;
   let im = imgs.get(path);
-  if (!im) { im = new Image(); im.decoding = 'async'; im.src = 'assets/art/' + path; imgs.set(path, im); }
+  if (!im) { im = new Image(); im.decoding = 'async'; im.src = 'assets/art/' + path.replace(/\.png$/, '.webp'); imgs.set(path, im); }
   return im.complete && im.naturalWidth ? im : null;
 }
 
@@ -22,3 +23,5 @@ export function drawArt(ctx, path, x, y, w, h) {
 }
 
 export const hasArt = (path) => present.has(path);
+// For the smoke test: how many requested images are ready / broken.
+export const artStats = () => { let ok = 0, bad = 0; for (const im of imgs.values()) { if (im.complete) im.naturalWidth ? ok++ : bad++; } return { requested: imgs.size, ok, bad }; };
