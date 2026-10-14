@@ -137,7 +137,7 @@ export function drawBoat(ctx, x, y, t, color = '#ff6b9a', wear = null, buddy = n
 
 // Sky + sea seen from the boat. `cam` (≤ 0) is the world y of the view top: the sky camera pans
 // up to follow airborne fish, clouds drift with parallax and the sea slides down out of view.
-export function drawSky(ctx, waterY, t, night = false, cam = 0) {
+export function drawSky(ctx, waterY, t, night = false, cam = 0, zoom = 1) {
   const sky = !night && art('bg/sky_shoot.png');
   if (sky) { const h = (W * sky.naturalHeight) / sky.naturalWidth; ctx.drawImage(sky, 0, Math.min(0, H - h - cam * 0.3), W, h); }
   else {
@@ -155,7 +155,7 @@ export function drawSky(ctx, waterY, t, night = false, cam = 0) {
     if (cy < -60 || cy > H + 60) continue;
     ctx.beginPath(); ctx.arc(cx, cy, 26 * s, 0, Math.PI * 2); ctx.arc(cx + 28 * s, cy + 6, 20 * s, 0, Math.PI * 2); ctx.arc(cx - 26 * s, cy + 8, 18 * s, 0, Math.PI * 2); ctx.fill();
   }
-  const wy = waterY - cam;
+  const wy = (waterY - cam) * zoom;
   if (wy >= H) return;
   const sea = ctx.createLinearGradient(0, wy, 0, wy + (H - waterY));
   sea.addColorStop(0, night ? '#1d3557' : '#48b5e0'); sea.addColorStop(1, night ? '#081426' : '#0b3d5c');

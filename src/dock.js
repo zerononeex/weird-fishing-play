@@ -1,4 +1,5 @@
-// The dock is the boat scene (GAME_SPEC §10.F): tap the fisher, the boat or the water to cast.
+// The dock is the boat scene (GAME_SPEC §10.F): a tap anywhere on the scene casts (v1.1.1), except on
+// the HUD bar and the zone buoys, which keep their own actions.
 // A HUD bar overlays the sky; buoys under the boat pick the zone; the title screen reuses the scene.
 import { CONFIG } from './config.js';
 import { G } from './game.js';
@@ -114,6 +115,7 @@ function kidFace(ctx, slotIndex, color, x, y, r) {
 
 function hud(ctx) {
   const slot = G.slot, st = slot.settings, charm = charmOf(slot);
+  addButton({ x: 8, y: 8, w: W - 16, h: 156, label: 'HUD', onTap: () => {}, silent: true }); // gaps in the bar never cast
   ctx.fillStyle = 'rgba(0,40,70,0.35)'; rr(ctx, 8, 8, W - 16, 156, 20); ctx.fill();
   kidFace(ctx, G.data.activeSlot, slot.color, 46, 46, 28);
   text(ctx, slot.name, 86, 32, 22, '#fff', 'left');
@@ -209,8 +211,8 @@ G.scenes.dock = {
       if (!open) { dock.msg = lockReason(slot, zone); dock.msgT = 2.5; sfx.error(); return; }
       dock.casting = DOCK.CAST_DELAY; sfx.cast();
     };
-    // cast targets first (lowest priority): the water surface band, then the boat + fisher
-    addButton({ x: 0, y: DOCK.WATER - 40, w: W, h: 100, label: 'CAST', onTap: tryCast, silent: true });
+    // cast targets first (lowest priority): the whole scene, then the boat + fisher; buoys + HUD go on top
+    addButton({ x: 0, y: 0, w: W, h: H, label: 'CAST_ANY', onTap: tryCast, silent: true });
     addButton({ x: DOCK.BOAT_X - 120, y: 170, w: 240, h: DOCK.WATER + 30 - 170, label: 'CAST', onTap: tryCast, silent: true });
     drawScene(ctx, t, slot.settings.night, zone, dock.casting > 0 ? 'cast' : 'idle');
     if (!slot.flags.hasCast && !dock.casting) {   // pulsing hint bubble until the first cast

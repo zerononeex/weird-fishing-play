@@ -271,6 +271,16 @@ export function drawFish(ctx, sp, x, y, r, dir, t, opts = {}) {
   ctx.restore();
 }
 
+// The species' sprite art fitted to a size×size box (its longest side = size), upright and facing right,
+// for menus (payout rows, the payout hero). Falls back to the code-drawn fish. Returns true for art.
+export function drawFishSprite(ctx, sp, x, y, size, t = 0) {
+  const im = art(fishArtPath(sp));
+  if (!im) { drawFish(ctx, sp, x, y, size / 2.8, 1, t); return false; }
+  const k = size / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
+  ctx.drawImage(im, x - w / 2, y - h / 2, w, h);
+  return true;
+}
+
 const silCache = new Map();
 function drawSilhouette(ctx, sp, x, y, r, dir) {
   const key = sp.id + ':' + r + (art(fishArtPath(sp)) ? 'a' : 'c'); // re-cache once the sprite has loaded

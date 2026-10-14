@@ -12,7 +12,8 @@ import { SPECIES } from './data/fish.js';
 import { settleRun } from './settle.js';
 import { sfx } from './audio.js';
 import { PRESET_NAMES, PRESET_COLORS, freshSlot } from './save.js';
-import { drawFish } from './fishart.js';
+import { drawFish, drawFishSprite, fishArtPath } from './fishart.js';
+import { art } from './art.js';
 
 const { W, H } = CONFIG;
 
@@ -88,9 +89,15 @@ G.scenes.shop = {
 };
 
 let tally = 0, after = 0;
+export const payoutDrawn = { hero: null, rows: [] }; // which sprite art the payout actually drew (smoke test)
+const HERO = 180, ROW_Y = 378, ROW_H = 54, ROWS = 6;
+
 G.scenes.payout = {
   steers: false,
-  enter() { G.payout = settleRun(G.slot, G.run, G.shoot); tally = 0; after = 0; G.persist(); if (!G.payout.rows.length) sfx.noCatch(); },
+  enter() {
+    G.payout = settleRun(G.slot, G.run, G.shoot); tally = 0; after = 0; G.persist(); if (!G.payout.rows.length) sfx.noCatch();
+    for (const r of G.payout.rows) art(fishArtPath(r.sp)); // make sure every sprite is loading
+  },
   update(dt) {
     const p = G.payout, was = after;
     if (tally < 1) { tally = Math.min(1, tally + dt / 1.5); if (p.total > 0) sfx.tally(); return; }
@@ -101,21 +108,33 @@ G.scenes.payout = {
     if (at(1.3) && p.opened.length) sfx.zoneUnlock();
   },
   render(ctx, t) {
-    const p = G.payout;
+    const p = G.payout, h = p.hero;
     drawSea(ctx, [120, 210, 245], [20, 90, 140], 0, t);
-    text(ctx, p.rows.length ? 'NICE CATCH!' : 'No fish this time!', W / 2, 90, 48);
-    const shown = p.rows.slice(0, 9);
+    text(ctx, p.rows.length ? 'NICE CATCH!' : 'No fish this time!', W / 2, h ? 52 : 90, h ? 44 : 48);
+    payoutDrawn.hero = null; payoutDrawn.rows = [];
+    if (h) { // hero: the run's most valuable fish, big, popping in
+      const cy = 178, k = Math.min(1, 0.5 + tally * 3), bob = Math.sin(t * 2.5) * 5;
+      const glow = ctx.createRadialGradient(W / 2, cy, 10, W / 2, cy, HERO * 0.62);
+      glow.addColorStop(0, 'rgba(255,240,170,0.75)'); glow.addColorStop(1, 'rgba(255,240,170,0)');
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(W / 2, cy, HERO * 0.62, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.translate(W / 2, cy + bob); ctx.scale(k, k);
+      if (drawFishSprite(ctx, h.sp, 0, 0, HERO, t)) payoutDrawn.hero = h.art;
+      ctx.restore();
+      text(ctx, h.sp.name, W / 2, 292, 32, '#fff');
+      text(ctx, `${h.pay < 0 ? '-' : ''}$${Math.abs(Math.round(h.pay)).toLocaleString()}`, W / 2, 330, 28, h.pay < 0 ? '#ff8fa3' : '#ffe066');
+    }
+    const shown = p.rows.slice(0, ROWS);
     shown.forEach((r, i) => {
-      const y = 170 + i * 62, k = Math.min(1, Math.max(0, tally * shown.length - i));
+      const y = ROW_Y + i * ROW_H, k = Math.min(1, Math.max(0, tally * shown.length - i));
       if (k <= 0) return;
       ctx.globalAlpha = k;
-      ctx.fillStyle = 'rgba(255,255,255,0.18)'; rr(ctx, 30, y - 27, W - 60, 54, 14); ctx.fill();
-      drawFish(ctx, r.sp, 72, y, Math.min(r.sp.r, 22), 1, t);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)'; rr(ctx, 30, y - 24, W - 60, 48, 14); ctx.fill();
+      if (drawFishSprite(ctx, r.sp, 74, y, 46, t)) payoutDrawn.rows.push(r.art);
       text(ctx, `${r.sp.name}${r.n > 1 ? ' ×' + r.n : ''}`, 110, y, 22, '#fff', 'left');
       text(ctx, `${r.pay < 0 ? '-' : ''}$${Math.abs(Math.round(r.pay)).toLocaleString()}`, W - 50, y, 24, r.pay < 0 ? '#ff8fa3' : '#ffe066', 'right');
       ctx.globalAlpha = 1;
     });
-    if (p.rows.length > shown.length) text(ctx, `+ ${p.rows.length - shown.length} more kinds`, W / 2, 170 + 9 * 62 - 20, 20, '#cfe9ff');
+    if (p.rows.length > shown.length) text(ctx, `+ ${p.rows.length - shown.length} more kinds`, W / 2, ROW_Y + ROWS * ROW_H - 14, 20, '#cfe9ff');
     if (p.lost) text(ctx, `${p.lost} got away`, W / 2, 710, 20, '#cfe9ff');
     const news = [p.newSpecies.length && `${p.newSpecies.length} new for your fish book!`, ...p.opened.map((z) => `${z.name} is open!`)].filter(Boolean);
     news.forEach((n, i) => text(ctx, n, W / 2, 742 + i * 28 - (news.length - 1) * 14, 22, '#b9fbc0'));

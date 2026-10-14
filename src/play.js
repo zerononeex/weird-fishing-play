@@ -10,7 +10,7 @@ import { BY_ID } from './data/fish.js';
 import { ZONES, light, lampRadius } from './data/zones.js';
 import { drawFish } from './fishart.js';
 import { drawSea, drawLure, drawLine, drawArrows, drawSawButton, text, lerpRgb, drawBoat, drawSky, drawCrosshair } from './draw.js';
-import { createShoot, stepShoot, SHOOT } from './shoot.js';
+import { createShoot, stepShoot, toScreen, SHOOT } from './shoot.js';
 import { GUN, ITEM } from './data/shop.js';
 import { wearDrawer, drawItemIcon } from './icons.js';
 import { art, drawArt } from './art.js';
@@ -249,8 +249,8 @@ G.scenes.shoot = {
       sfx.splat();
       if (pay < 0) sfx.ouch(); else sfx.coin();
       if (f.sp.rarity === 'boss') { sfx.boss(); quake(12, 0.5); }
-      const y = f.y - s.cam;
-      burst(f.x, y, f.sp.color, 14, 240); popup(f.x, y - 20, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}`, pay < 0 ? '#ff8fa3' : '#ffe066');
+      const { x, y } = toScreen(s, f.x, f.y);
+      burst(x, y, f.sp.color, 14, 240); popup(x, y - 20, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}`, pay < 0 ? '#ff8fa3' : '#ffe066');
     }
     if (done) G.go('noAirborne');
   },
@@ -258,10 +258,10 @@ G.scenes.shoot = {
   pointerMove(p) { Object.assign(G.shoot.pointer, p); },
   pointerUp() { G.shoot.pointer.down = false; },
   render(ctx, t) {
-    const s = G.shoot, cam = s.cam;
-    drawSky(ctx, SHOOT.WATER, t, G.run.night, cam);
-    ctx.save(); ctx.translate(0, -cam);
-    if (SHOOT.WATER + 4 - cam < H + 140) {
+    const s = G.shoot, cam = s.cam, z = s.zoom;
+    drawSky(ctx, SHOOT.WATER, t, G.run.night, cam, z);
+    ctx.save(); ctx.translate(W / 2, 0); ctx.scale(z, z); ctx.translate(-W / 2, -cam); // sky camera: pan + zoom
+    if ((SHOOT.WATER + 4 - cam) * z < H + 140) {
       drawBoat(ctx, s.x0, SHOOT.WATER + 4, t, G.slot.color, wearDrawer(G.slot.equip),
         G.slot.flags.bossBeaten ? (c) => drawFish(c, BY_ID.get(47), -44, -40, 16, -1, t) : null);
     }
@@ -279,11 +279,11 @@ G.scenes.shoot = {
     ctx.restore();
     // fish above / below the view: a small arrow at the edge so kids know where to look
     for (const f of s.air) {
-      const y = f.y - cam;
-      if (y > -f.r && y < H + f.r) continue;
+      const { x, y } = toScreen(s, f.x, f.y), r = f.r * z;
+      if (y > -r && y < H + r) continue;
       const top = y < 0, ay = top ? 18 : H - 18;
       ctx.fillStyle = 'rgba(255,209,102,0.9)'; ctx.beginPath();
-      ctx.moveTo(f.x, ay + (top ? -10 : 10)); ctx.lineTo(f.x - 12, ay + (top ? 8 : -8)); ctx.lineTo(f.x + 12, ay + (top ? 8 : -8)); ctx.fill();
+      ctx.moveTo(x, ay + (top ? -10 : 10)); ctx.lineTo(x - 12, ay + (top ? 8 : -8)); ctx.lineTo(x + 12, ay + (top ? 8 : -8)); ctx.fill();
     }
     drawFx(ctx);
     if (s.pointer.down) drawCrosshair(ctx, s.pointer.x, s.pointer.y, gun().spread, true);
