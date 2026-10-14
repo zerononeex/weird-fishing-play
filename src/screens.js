@@ -1,13 +1,12 @@
-// Menu-style screens (dock, payout, ...). Placeholder launch/shoot/payout until Phase 4.
+// Menu-style screens: shop, payout, ending, Fish book, kid slots. The dock + title scene live in dock.js.
 import { CONFIG } from './config.js';
 import { G } from './game.js';
 import { addButton } from './ui.js';
 import { drawSea, text, rr, drawBoat } from './draw.js';
 import { wearDrawer } from './icons.js';
-import { startRun } from './play.js';
 import { ZONES } from './data/zones.js';
-import { zoneUnlocked, lockReason, refreshUnlocks, fishPay, runTotal, gearOf, canBuy, buy, equip, owns, isEquipped, grantGifts } from './economy.js';
-import { ITEMS, TABS, GUN } from './data/shop.js';
+import { canBuy, buy, equip, owns, isEquipped } from './economy.js';
+import { ITEMS, TABS, GUN, abilityText } from './data/shop.js';
 import { drawItemIcon } from './icons.js';
 import { SPECIES } from './data/fish.js';
 import { settleRun } from './settle.js';
@@ -18,7 +17,7 @@ import { drawFish } from './fishart.js';
 const { W, H } = CONFIG;
 
 export function bigButton(ctx, x, y, w, h, label, onTap, opts = {}) {
-  const b = addButton({ x, y, w, h, onTap, disabled: opts.disabled, label });
+  const b = addButton({ x, y, w, h, onTap, disabled: opts.disabled, label, silent: opts.silent });
   ctx.fillStyle = opts.disabled ? 'rgba(255,255,255,0.18)' : opts.color || '#ffd166';
   rr(ctx, x, y, w, h, Math.min(24, h / 3)); ctx.fill();
   ctx.strokeStyle = 'rgba(0,30,50,0.35)'; ctx.lineWidth = 4; ctx.stroke();
@@ -26,53 +25,7 @@ export function bigButton(ctx, x, y, w, h, label, onTap, opts = {}) {
   return b;
 }
 
-// Sun / moon toggle icon.
-function skyIcon(ctx, x, y, night) {
-  if (night) {
-    ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(x, y, 20, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#1d3557'; ctx.beginPath(); ctx.arc(x + 9, y - 6, 17, 0, Math.PI * 2); ctx.fill();
-  } else {
-    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4;
-    for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) { ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 24, y + Math.sin(a) * 24); ctx.lineTo(x + Math.cos(a) * 31, y + Math.sin(a) * 31); ctx.stroke(); }
-    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(x, y, 18, 0, Math.PI * 2); ctx.fill();
-  }
-}
-
-export function castFromDock() {
-  const slot = G.slot, zone = ZONES[slot.zone - 1];
-  startRun({ zone, ...gearOf(slot, zone.id), cond: { night: slot.settings.night, hat: slot.equip.hat, suit: slot.equip.outfit, post: slot.flags.bossBeaten } });
-  G.go('cast');
-}
-
 const money = (n) => '$' + Math.round(n).toLocaleString();
-
-G.scenes.dock = {
-  steers: false,
-  enter() { refreshUnlocks(G.slot); grantGifts(G.slot); G.persist(); },
-  render(ctx, t) {
-    const slot = G.slot, zone = ZONES[slot.zone - 1], night = slot.settings.night;
-    drawSea(ctx, night ? [30, 60, 110] : [120, 210, 245], night ? [5, 20, 50] : [20, 90, 140], t * 20, t);
-    text(ctx, 'WEIRD FISHING', W / 2, 80, 52);
-    text(ctx, `${slot.name} · ${money(slot.cash)}`, W / 2, 140, 26, '#ffe066');
-    // zone picker
-    const step = (d) => { slot.zone = ((slot.zone - 1 + d + ZONES.length) % ZONES.length) + 1; G.persist(); };
-    bigButton(ctx, 20, 185, 88, 104, '◀', () => step(-1), { color: '#cfe9ff' });
-    bigButton(ctx, W - 108, 185, 88, 104, '▶', () => step(1), { color: '#cfe9ff' });
-    const open = zoneUnlocked(slot, zone);
-    text(ctx, zone.name, W / 2, 220, 32, open ? '#fff' : '#9fb7c9');
-    text(ctx, open ? (Number.isFinite(zone.maxDepth) ? `${zone.maxDepth} m deep · best ${slot.bestDepth[zone.id] || 0} m` : `endless! · best ${slot.bestDepth[4] || 0} m`) : lockReason(slot, zone),
-      W / 2, 262, 18, '#cfe9ff');
-    // Day / Night toggle
-    const b = bigButton(ctx, 130, 315, 280, 86, '', () => { slot.settings.night = !slot.settings.night; G.persist(); }, { color: night ? '#1d3557' : '#bde0fe' });
-    skyIcon(ctx, b.x + 56, b.y + 43, night);
-    text(ctx, night ? 'Night' : 'Day', b.x + 170, b.y + 43, 34, night ? '#fff3b0' : '#4a2c00');
-    bigButton(ctx, 30, 430, 230, 110, 'SHOP', () => G.go('shop'), { color: '#8ac926' });
-    bigButton(ctx, 280, 430, 230, 110, 'FISH BOOK', () => G.go('dex'), { color: '#4cc9f0', size: 30 });
-    bigButton(ctx, 30, 565, 230, 80, slot.settings.muted ? 'Sound: off' : 'Sound: on', () => { slot.settings.muted = !slot.settings.muted; G.persist(); }, { color: '#e9ecef', size: 26 });
-    bigButton(ctx, 280, 565, 230, 80, 'Kids', () => G.go('back'), { color: '#e9ecef', size: 26 });
-    bigButton(ctx, 70, 690, 400, 170, open ? 'CAST!' : 'LOCKED', castFromDock, { disabled: !open, size: 64 });
-  },
-};
 
 // ---- shop ----
 const PER_PAGE = 6;
@@ -81,15 +34,18 @@ const PISTOL = { id: 'pistol', cat: 'guns', name: GUN.pistol.name, price: 0, req
 const itemsOf = (tab) => (tab === 'guns' ? [PISTOL] : []).concat(ITEMS.filter((i) => i.cat === tab));
 
 function action(slot, it) {
-  const equipable = it.cat === 'guns' || it.hat || it.outfit || it.start;
+  const equipable = it.cat === 'guns' || it.hat || it.outfit || it.start || it.charm;
   if (it.id === 'pistol' || owns(slot, it.id)) {
     if (!equipable) return { label: 'OWNED', disabled: true };
-    return isEquipped(slot, it) ? { label: 'ON ✓', color: '#ffd166', tap: () => it.cat !== 'guns' && equip(slot, it) }
-      : { label: 'USE', color: '#bde0fe', tap: () => equip(slot, it) };
+    return isEquipped(slot, it) ? { label: 'EQUIPPED', color: '#ffd166', tap: () => it.cat !== 'guns' && equip(slot, it) && sfx.equip() }
+      : { label: 'EQUIP', color: '#bde0fe', tap: () => { equip(slot, it); sfx.equip(); } };
   }
   const why = canBuy(slot, it);
-  return why ? { label: money(it.price), disabled: true, why } : { label: `BUY ${money(it.price)}`, color: '#8ac926', tap: () => buy(slot, it) };
+  return why ? { label: money(it.price), disabled: true, why }
+    : { label: `BUY ${money(it.price)}`, color: '#8ac926', tap: () => { buy(slot, it); sfx.buy(); } };
 }
+
+export const shopLines = (it, why) => (it.ability ? [abilityText(it.ability), why || it.desc] : [why || it.desc]);
 
 G.scenes.shop = {
   steers: false,
@@ -98,10 +54,11 @@ G.scenes.shop = {
     drawSea(ctx, [140, 200, 160], [30, 80, 70], 0, t);
     text(ctx, 'SHOP', W / 2, 60, 48);
     text(ctx, money(slot.cash), W / 2, 112, 30, '#ffe066');
-    bigButton(ctx, 16, 28, 110, 70, 'BACK', () => G.go('back'), { color: '#e9ecef', size: 24 });
+    bigButton(ctx, 16, 28, 110, 70, 'BACK', () => { sfx.close(); G.go('back'); }, { color: '#e9ecef', size: 24, silent: true });
+    const tw = (W - 24) / TABS.length;
     TABS.forEach(([id, label], i) => {
-      bigButton(ctx, 12 + i * 130, 150, 126, 72, label, () => { shopState.tab = id; shopState.page = 0; },
-        { color: shopState.tab === id ? '#ffd166' : '#cfe9ff', size: 24 });
+      bigButton(ctx, 12 + i * tw, 150, tw - 4, 72, label, () => { shopState.tab = id; shopState.page = 0; },
+        { color: shopState.tab === id ? '#ffd166' : '#cfe9ff', size: 20 });
     });
     const list = itemsOf(shopState.tab), pages = Math.ceil(list.length / PER_PAGE);
     shopState.page = Math.min(shopState.page, pages - 1);
@@ -109,10 +66,18 @@ G.scenes.shop = {
       const y = 240 + i * 100;
       ctx.fillStyle = 'rgba(255,255,255,0.2)'; rr(ctx, 16, y, W - 32, 90, 16); ctx.fill();
       drawItemIcon(ctx, it, 62, y + 45);
-      text(ctx, it.name, 106, y + 28, 24, '#fff', 'left');
-      const a = action(slot, it);
-      text(ctx, a.why || it.desc, 106, y + 62, 16, a.why ? '#ffd6a5' : '#e0f2ff', 'left', '600');
-      bigButton(ctx, W - 186, y + 14, 160, 62, a.label, () => { a.tap?.(); G.persist(); }, { disabled: a.disabled, color: a.color, size: 22 });
+      const a = action(slot, it), lines = shopLines(it, a.why);
+      if (lines.length === 2) {   // wear: name · ability (gold) · note
+        text(ctx, it.name, 106, y + 20, 22, '#fff', 'left');
+        text(ctx, lines[0], 106, y + 46, 18, '#ffe066', 'left');
+        text(ctx, lines[1], 106, y + 71, 14, a.why ? '#ffd6a5' : '#e0f2ff', 'left', '600');
+      } else {
+        text(ctx, it.name, 106, y + 28, 24, '#fff', 'left');
+        text(ctx, lines[0], 106, y + 62, 16, a.why ? '#ffd6a5' : '#e0f2ff', 'left', '600');
+      }
+      bigButton(ctx, W - 186, y + 14, 160, 62, a.label, () => { a.tap?.(); G.persist(); },
+        { disabled: a.disabled, color: a.color, size: a.label.length > 9 ? 18 : 22, silent: !!a.tap });
+      if (a.disabled && a.why) addButton({ x: W - 186, y: y + 14, w: 160, h: 62, onTap: () => sfx.error(), label: 'why' + it.id, silent: true });
     });
     if (pages > 1) {
       bigButton(ctx, 30, 860, 140, 80, '◀', () => { shopState.page = (shopState.page + pages - 1) % pages; }, { color: '#cfe9ff' });
@@ -122,11 +87,19 @@ G.scenes.shop = {
   },
 };
 
-let tally = 0;
+let tally = 0, after = 0;
 G.scenes.payout = {
   steers: false,
-  enter() { G.payout = settleRun(G.slot, G.run, G.shoot); tally = 0; G.persist(); if (G.payout.total > 0) sfx.tada(); },
-  update(dt) { tally = Math.min(1, tally + dt / 1.5); },
+  enter() { G.payout = settleRun(G.slot, G.run, G.shoot); tally = 0; after = 0; G.persist(); if (!G.payout.rows.length) sfx.noCatch(); },
+  update(dt) {
+    const p = G.payout, was = after;
+    if (tally < 1) { tally = Math.min(1, tally + dt / 1.5); if (p.total > 0) sfx.tally(); return; }
+    after += dt; // after the tally: fanfare, then new species, then zone unlocks
+    const at = (s) => was < s && after >= s;
+    if (at(0.01) && p.total > 0) sfx.tada();
+    if (at(0.6) && p.newSpecies.length) sfx.newSpecies();
+    if (at(1.3) && p.opened.length) sfx.zoneUnlock();
+  },
   render(ctx, t) {
     const p = G.payout;
     drawSea(ctx, [120, 210, 245], [20, 90, 140], 0, t);
@@ -190,7 +163,7 @@ G.scenes.ending = {
   steers: false,
   enter() { comic = 0; },
   update(dt) { comic += dt; },
-  pointerDown() { if (comic < 5) comic = Math.ceil((comic + 0.01) / 1.6) * 1.6; else G.go('done'); return true; },
+  pointerDown() { sfx.page(); if (comic < 5) comic = Math.ceil((comic + 0.01) / 1.6) * 1.6; else G.go('done'); return true; },
   render(ctx, t) {
     drawSea(ctx, [255, 214, 165], [255, 158, 170], 0, t);
     panel(ctx, 0, 30, t); panel(ctx, 1, 300, t); panel(ctx, 2, 570, t);
@@ -256,28 +229,12 @@ G.scenes.dex = {
       text(ctx, a, 160, 745, 20, '#e0f2ff', 'left', '600');
       if (b) text(ctx, b, 160, 782, 20, '#ffd6a5', 'left', '600');
     }
-    bigButton(ctx, 30, 860, 140, 80, '◀', () => { dexState.page = (dexState.page + pages - 1) % pages; dexState.pick = null; }, { color: '#cfe9ff' });
-    bigButton(ctx, W - 170, 860, 140, 80, '▶', () => { dexState.page = (dexState.page + 1) % pages; dexState.pick = null; }, { color: '#cfe9ff' });
+    bigButton(ctx, 30, 860, 140, 80, '◀', () => { sfx.page(); dexState.page = (dexState.page + pages - 1) % pages; dexState.pick = null; }, { color: '#cfe9ff', silent: true });
+    bigButton(ctx, W - 170, 860, 140, 80, '▶', () => { sfx.page(); dexState.page = (dexState.page + 1) % pages; dexState.pick = null; }, { color: '#cfe9ff', silent: true });
     text(ctx, `${dexState.page + 1} / ${pages}`, W / 2, 900, 26);
   },
 };
-// ---- title + kid slots ----
-const TITLE_FISH = [1, 2, 12, 54, 23, 9, 47, 60].map((id) => SPECIES[id - 1]);
-G.scenes.title = {
-  steers: false,
-  pointerDown() { G.go('tap'); return true; },
-  render(ctx, t) {
-    drawSea(ctx, [120, 210, 245], [10, 60, 110], t * 30, t);
-    TITLE_FISH.forEach((sp, i) => {
-      const dir = i % 2 ? -1 : 1, x = ((t * (40 + i * 9) * dir + i * 150) % (W + 120) + W + 120) % (W + 120) - 60;
-      drawFish(ctx, sp, x, 470 + i * 58, Math.min(sp.r, 26), dir, t);
-    });
-    text(ctx, 'WEIRD', W / 2, 190, 96, '#ffd166');
-    text(ctx, 'FISHING', W / 2, 290, 96, '#fff');
-    if (Math.sin(t * 4) > -0.4) text(ctx, 'TAP TO PLAY', W / 2, 400, 36, '#fff');
-  },
-};
-
+// ---- kid slots ----
 const cycle = (list, v, d = 1) => list[(list.indexOf(v) + d + list.length) % list.length];
 G.scenes.slots = {
   steers: false,
@@ -286,7 +243,7 @@ G.scenes.slots = {
     text(ctx, "Who's fishing?", W / 2, 80, 48);
     G.data.slots.forEach((slot, i) => {
       const y = 140 + i * 260, view = slot || freshSlot(i);
-      const card = addButton({ x: 24, y, w: W - 48, h: 240, onTap: () => { G.useSlot(i); G.go('pick'); }, label: 'slot' + i });
+      const card = addButton({ x: 24, y, w: W - 48, h: 240, onTap: () => { sfx.kidPick(); G.useSlot(i); G.go('pick'); }, label: 'slot' + i, silent: true });
       ctx.fillStyle = view.color; rr(ctx, card.x, card.y, card.w, card.h, 26); ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 5; ctx.stroke();
       drawBoat(ctx, 110, y + 200, t + i, view.color === '#ffd166' ? '#ff6b9a' : '#ffd166', wearDrawer(view.equip));

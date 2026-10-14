@@ -1,6 +1,8 @@
 // Code-drawn art. Every visual in the game is drawn here with canvas paths — no image files.
 import { CONFIG } from './config.js';
 import { ui } from './ui.js';
+import { art, drawArt } from './art.js';
+import { ANCHOR } from './icons.js';
 
 const { W, H } = CONFIG;
 export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -24,10 +26,17 @@ export function shade(rgb, k) { return `rgb(${rgb.map((c) => Math.round(c * k)).
 export function lerpRgb(a, b, t) { return [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)]; }
 
 // Underwater background; `scroll` is the world offset in px so the bubbles/streaks move with depth.
-export function drawSea(ctx, top, bottom, scroll, t) {
+export function drawSea(ctx, top, bottom, scroll, t, bg = null) {
+  const im = bg && art(bg);
+  if (im) { // tall full-bleed art scrolls slowly with depth (wraps)
+    const h = (W * im.naturalHeight) / im.naturalWidth, off = ((scroll * 0.25) % h + h) % h;
+    ctx.drawImage(im, 0, -off, W, h); if (h - off < H) ctx.drawImage(im, 0, h - off, W, h);
+    ctx.fillStyle = `rgba(${bottom},${Math.min(0.75, scroll / 9000)})`; ctx.fillRect(0, 0, W, H); // darken with depth
+  } else {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, `rgb(${top})`); g.addColorStop(1, `rgb(${bottom})`);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
   ctx.fillStyle = 'rgba(255,255,255,0.08)';
   for (let i = 0; i < 24; i++) {
     const x = (i * 197 + Math.sin(t * 0.6 + i) * 12) % W;
@@ -64,6 +73,10 @@ export function drawArrows(ctx, input) {
   for (const b of ui.buttons) {
     if (!b.hold) continue;
     const on = input.holds[b.hold].size > 0;
+    if (drawArt(ctx, b.hold < 0 ? 'ui/btn_left.png' : 'ui/btn_right.png', b.x, b.y, b.w, b.h)) {
+      if (on) { ctx.fillStyle = 'rgba(255,209,102,0.45)'; rr(ctx, b.x, b.y, b.w, b.h, 24); ctx.fill(); }
+      continue;
+    }
     ctx.fillStyle = on ? 'rgba(255,209,102,0.85)' : 'rgba(255,255,255,0.28)';
     rr(ctx, b.x, b.y, b.w, b.h, 24); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 4; ctx.stroke();
@@ -73,40 +86,79 @@ export function drawArrows(ctx, input) {
   }
 }
 
-// Boat + fisher at the surface. Wearables are drawn by drawWear (step 5.5).
-export function drawBoat(ctx, x, y, t, color = '#ff6b9a', wear = null, buddy = null) {
+// Big SAW button (hold): a spinning blade that lights up while held.
+export function drawSawButton(ctx, input, t) {
+  const b = ui.buttons.find((b) => b.saw);
+  if (!b) return;
+  const on = input.saw.size > 0, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  if (drawArt(ctx, 'ui/btn_saw.png', b.x, b.y, b.w, b.h)) {
+    if (on) { ctx.fillStyle = 'rgba(255,159,28,0.45)'; ctx.beginPath(); ctx.arc(cx, cy, b.w / 2, 0, Math.PI * 2); ctx.fill(); }
+    return;
+  }
+  ctx.fillStyle = on ? 'rgba(255,159,28,0.9)' : 'rgba(255,255,255,0.28)';
+  ctx.beginPath(); ctx.arc(cx, cy, b.w / 2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 4; ctx.stroke();
+  ctx.save(); ctx.translate(cx, cy - 8); ctx.rotate(on ? t * 25 : 0);
+  ctx.fillStyle = on ? '#5a3b00' : '#fff';
+  for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(14, -5); ctx.lineTo(24, 0); ctx.lineTo(14, 5); ctx.fill(); }
+  ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  text(ctx, 'SAW', cx, cy + 28, 18, on ? '#5a3b00' : '#fff');
+}
+
+// Boat + fisher at the surface. pose 'cast' swings the rod forward. Art slots: dock/boat.png,
+// dock/fisher_idle.png, dock/fisher_cast.png (hats/outfits overlay at ANCHOR.ART).
+export function drawBoat(ctx, x, y, t, color = '#ff6b9a', wear = null, buddy = null, pose = 'idle') {
   ctx.save(); ctx.translate(x, y + Math.sin(t * 2) * 3); ctx.rotate(Math.sin(t * 1.3) * 0.03);
-  // fisher
-  ctx.fillStyle = color; rr(ctx, -16, -62, 32, 40, 10); ctx.fill();
-  ctx.fillStyle = '#ffd7b5'; ctx.beginPath(); ctx.arc(0, -76, 16, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#1b1b1b'; ctx.beginPath(); ctx.arc(-5, -78, 2.4, 0, Math.PI * 2); ctx.arc(6, -78, 2.4, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -73, 6, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
-  wear?.(ctx);
-  // rod
-  ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(10, -40); ctx.lineTo(60, -110); ctx.stroke();
-  // hull
-  ctx.fillStyle = '#e76f51'; ctx.beginPath(); ctx.moveTo(-70, -22); ctx.lineTo(70, -22); ctx.lineTo(50, 10); ctx.lineTo(-50, 10); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#f4a261'; ctx.fillRect(-70, -26, 140, 8);
+  const boatImg = art('dock/boat.png'), fisherImg = art(pose === 'cast' ? 'dock/fisher_cast.png' : 'dock/fisher_idle.png');
+  if (fisherImg) { ctx.drawImage(fisherImg, -80, -150, 160, 160); wear?.(ctx, ANCHOR.ART); }
+  else {
+    ctx.fillStyle = color; rr(ctx, -16, -62, 32, 40, 10); ctx.fill();
+    ctx.fillStyle = '#ffd7b5'; ctx.beginPath(); ctx.arc(0, -76, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1b1b1b'; ctx.beginPath(); ctx.arc(-5, -78, 2.4, 0, Math.PI * 2); ctx.arc(6, -78, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -73, 6, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+    wear?.(ctx);
+    // rod: up and back when idle, swung forward over the water when casting
+    ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(10, -40);
+    if (pose === 'cast') ctx.lineTo(95, -70); else ctx.lineTo(60, -110);
+    ctx.stroke();
+  }
+  if (boatImg) ctx.drawImage(boatImg, -100, -40, 200, 100);
+  else {
+    ctx.fillStyle = '#e76f51'; ctx.beginPath(); ctx.moveTo(-70, -22); ctx.lineTo(70, -22); ctx.lineTo(50, 10); ctx.lineTo(-50, 10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f4a261'; ctx.fillRect(-70, -26, 140, 8);
+  }
   buddy?.(ctx);
   ctx.restore();
 }
 
-export function drawSky(ctx, waterY, t, night = false) {
-  const g = ctx.createLinearGradient(0, 0, 0, waterY);
-  g.addColorStop(0, night ? '#0b1d3a' : '#7fd3ff'); g.addColorStop(1, night ? '#28407a' : '#d8f3ff');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, waterY);
-  if (night) { ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(430, 120, 34, 0, Math.PI * 2); ctx.fill(); }
-  else { ctx.fillStyle = '#ffe066'; ctx.beginPath(); ctx.arc(430, 120, 40, 0, Math.PI * 2); ctx.fill(); }
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  for (const [x, y, s] of [[90, 170, 1], [300, 90, 0.8], [520, 260, 1.2]]) {
-    const cx = ((x + t * 12 * s) % (W + 160)) - 80;
-    ctx.beginPath(); ctx.arc(cx, y, 26 * s, 0, Math.PI * 2); ctx.arc(cx + 28 * s, y + 6, 20 * s, 0, Math.PI * 2); ctx.arc(cx - 26 * s, y + 8, 18 * s, 0, Math.PI * 2); ctx.fill();
+// Sky + sea seen from the boat. `cam` (≤ 0) is the world y of the view top: the sky camera pans
+// up to follow airborne fish, clouds drift with parallax and the sea slides down out of view.
+export function drawSky(ctx, waterY, t, night = false, cam = 0) {
+  const sky = !night && art('bg/sky_shoot.png');
+  if (sky) { const h = (W * sky.naturalHeight) / sky.naturalWidth; ctx.drawImage(sky, 0, Math.min(0, H - h - cam * 0.3), W, h); }
+  else {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  const high = Math.min(1, -cam / 2000); // deeper blue the higher the camera climbs
+  g.addColorStop(0, night ? '#071228' : high > 0.3 ? '#3fa9e8' : '#7fd3ff'); g.addColorStop(1, night ? '#28407a' : '#d8f3ff');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-  const sea = ctx.createLinearGradient(0, waterY, 0, H);
+  const sunY = 120 - cam * 0.15;
+  if (night) { ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(430, sunY, 34, 0, Math.PI * 2); ctx.fill(); }
+  else { ctx.fillStyle = '#ffe066'; ctx.beginPath(); ctx.arc(430, sunY, 40, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  for (const [x, y, s] of [[90, 170, 1], [300, 90, 0.8], [520, 260, 1.2], [200, -500, 1], [420, -900, 0.9], [60, -1400, 1.1]]) {
+    const cx = ((x + t * 12 * s) % (W + 160)) - 80, cy = y - cam * 0.5;
+    if (cy < -60 || cy > H + 60) continue;
+    ctx.beginPath(); ctx.arc(cx, cy, 26 * s, 0, Math.PI * 2); ctx.arc(cx + 28 * s, cy + 6, 20 * s, 0, Math.PI * 2); ctx.arc(cx - 26 * s, cy + 8, 18 * s, 0, Math.PI * 2); ctx.fill();
+  }
+  const wy = waterY - cam;
+  if (wy >= H) return;
+  const sea = ctx.createLinearGradient(0, wy, 0, wy + (H - waterY));
   sea.addColorStop(0, night ? '#1d3557' : '#48b5e0'); sea.addColorStop(1, night ? '#081426' : '#0b3d5c');
-  ctx.fillStyle = sea; ctx.fillRect(0, waterY, W, H - waterY);
+  ctx.fillStyle = sea; ctx.fillRect(0, wy, W, H - wy);
   ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3; ctx.beginPath();
-  for (let x = 0; x <= W; x += 10) ctx.lineTo(x, waterY + Math.sin(x * 0.05 + t * 2) * 3);
+  for (let x = 0; x <= W; x += 10) ctx.lineTo(x, wy + Math.sin(x * 0.05 + t * 2) * 3);
   ctx.stroke();
 }
 

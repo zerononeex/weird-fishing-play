@@ -1,4 +1,4 @@
-// Save data (GAME_SPEC §7).
+// Save data (GAME_SPEC §7, §10.E).
 import { CONFIG } from './config.js';
 export const PRESET_NAMES = ['Captain Splash', 'Fin Wizard', 'Reel Ranger', 'Bubble Boss', 'Hook Hero', 'Wave Rider'];
 export const PRESET_COLORS = ['#ff6b9a', '#4cc9f0', '#ffd166', '#8ac926', '#c77dff', '#ff9f43'];
@@ -6,16 +6,18 @@ export const PRESET_COLORS = ['#ff6b9a', '#4cc9f0', '#ffd166', '#8ac926', '#c77d
 export function freshSlot(i = 0) {
   return {
     name: PRESET_NAMES[i % PRESET_NAMES.length], color: PRESET_COLORS[i % PRESET_COLORS.length], cash: 0,
-    owned: ['line0', 'pistol'], equip: { gun: 'pistol', hat: null, outfit: null, start: null },
-    zonesUnlocked: [1], bestDepth: {}, dex: {}, flags: { bossBeaten: false },
-    settings: { muted: false, night: false }, zone: 1,
+    owned: ['line0', 'pistol'], equip: { gun: 'pistol', hat: null, outfit: null, start: null, charm: null },
+    zonesUnlocked: [1], bestDepth: {}, dex: {}, flags: { bossBeaten: false, hasCast: false },
+    settings: { muted: false, musicMuted: false, night: false }, zone: 1,
   };
 }
 
-// ---- persistence: localStorage['weirdfishing.save.v1'], 3 slots, migrate() on load ----
+// ---- persistence: localStorage['weirdfishing.save.v2'], 3 slots, migrate() on load ----
 
-export const KEY = CONFIG.SAVE_KEY;
-export const blankSave = () => ({ version: 1, activeSlot: 0, slots: [null, null, null] });
+export const KEY = CONFIG.SAVE_KEY;             // 'weirdfishing.save.v2'
+export const KEY_V1 = 'weirdfishing.save.v1';   // read once for migration, never written or edited
+export const VERSION = 2;
+export const blankSave = () => ({ version: VERSION, activeSlot: 0, slots: [null, null, null] });
 
 function store() { try { return globalThis.localStorage || null; } catch { return null; } }
 
@@ -28,17 +30,39 @@ function normalizeSlot(slot, i) {
     owned: Array.isArray(slot.owned) ? slot.owned : f.owned };
 }
 
-// Every future shape change gets a new key AND a step here; v1 is never edited in place.
+// v1 → v2: the Toaster / Hairdryer / Zap Coil mulligans become Hook Charms (best owned is equipped),
+// the single mute splits into Music + Sound, and slots that already played skip the "tap to cast" hint.
+const V1_CHARMS = [['coil', 'charm_storm'], ['hairdryer', 'charm_hairdryer'], ['toaster', 'charm_toaster']]; // best first
+function slotV1toV2(slot) {
+  if (!slot || typeof slot !== 'object') return null;
+  const owned = Array.isArray(slot.owned) ? slot.owned : [];
+  const map = Object.fromEntries(V1_CHARMS);
+  const best = V1_CHARMS.find(([old]) => owned.includes(old));
+  const played = (slot.cash || 0) > 0 || Object.keys(slot.dex || {}).length > 0 || Object.keys(slot.bestDepth || {}).length > 0;
+  return {
+    ...slot,
+    owned: [...new Set(owned.map((id) => map[id] || id))],
+    equip: { ...slot.equip, charm: best ? best[1] : null },
+    settings: { ...slot.settings, musicMuted: !!slot.settings?.muted },
+    flags: { ...slot.flags, hasCast: played },
+  };
+}
+export const migrateV1 = (raw) => ({ ...raw, version: 2, slots: [0, 1, 2].map((i) => slotV1toV2(raw.slots?.[i])) });
+
+// Every future shape change gets a new key AND a step here; old keys are never edited in place.
 export function migrate(raw) {
-  if (!raw || typeof raw !== 'object' || raw.version !== 1) return blankSave();
+  if (!raw || typeof raw !== 'object') return blankSave();
+  if (raw.version === 1) raw = migrateV1(raw);
+  if (raw.version !== VERSION) return blankSave();
   const slots = [0, 1, 2].map((i) => normalizeSlot(raw.slots?.[i], i));
-  return { ...raw, version: 1, activeSlot: Math.min(2, Math.max(0, raw.activeSlot | 0)), slots };
+  return { ...raw, version: VERSION, activeSlot: Math.min(2, Math.max(0, raw.activeSlot | 0)), slots };
 }
 
 export function load(storage = store()) {
-  let txt = null;
-  try { txt = storage?.getItem(KEY); } catch { return blankSave(); }
-  if (!txt) return blankSave();
+  let txt = null, old = null;
+  try { txt = storage?.getItem(KEY); if (!txt) old = storage?.getItem(KEY_V1); } catch { return blankSave(); }
+  if (!txt && !old) return blankSave();
+  if (!txt) { try { return migrate(JSON.parse(old)); } catch { return blankSave(); } } // v1 is left untouched
   try { return migrate(JSON.parse(txt)); } catch {
     try { storage.setItem(KEY + '.bak', txt); } catch { /* storage full or blocked: keep playing */ }
     return blankSave();

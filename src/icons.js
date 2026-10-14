@@ -1,4 +1,5 @@
-// Code-drawn shop icons and wearables. All original vector shapes.
+// Code-drawn shop icons and wearables. All original vector shapes; art slots override when present.
+import { drawArt } from './art.js';
 const TAU = Math.PI * 2;
 
 function circ(c, x, y, r, f) { c.fillStyle = f; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
@@ -31,11 +32,19 @@ function star(c, x, y, r, f) {
   c.closePath(); c.fill();
 }
 
+// Where hats/outfits sit on the fisher. CODE = the code-drawn fisher; ART = the Act 2 sprite (tuned on import).
+export const ANCHOR = {
+  CODE: { head: [0, -78], hatScale: 1, body: [0, 0], bodyScale: 1 },
+  ART: { head: [0, -105], hatScale: 1.25, body: [0, -30], bodyScale: 1.25 },
+};
+
 // Draws hat + outfit for drawBoat's wear callback.
 export function wearDrawer(equip) {
-  return (c) => {
-    if (equip.outfit && OUTFITS[equip.outfit]) OUTFITS[equip.outfit](c);
-    if (equip.hat && HATS[equip.hat]) { c.save(); c.translate(0, -78); HATS[equip.hat](c); c.restore(); }
+  return (c, a = ANCHOR.CODE) => {
+    if (equip.outfit && OUTFITS[equip.outfit]) {
+      c.save(); c.translate(...a.body); c.scale(a.bodyScale, a.bodyScale); OUTFITS[equip.outfit](c); c.restore();
+    }
+    if (equip.hat && HATS[equip.hat]) { c.save(); c.translate(...a.head); c.scale(a.hatScale, a.hatScale); HATS[equip.hat](c); c.restore(); }
   };
 }
 
@@ -60,9 +69,17 @@ const ICONS = {
   turbo(c) { ICONS.chainsaw(c); c.fillStyle = '#ffd166'; c.beginPath(); c.moveTo(-6, -20); c.lineTo(2, -8); c.lineTo(-4, -8); c.lineTo(4, 4); c.lineTo(-10, -10); c.lineTo(-4, -10); c.fill(); },
   float(c) { ICONS.chainsaw(c); circ(c, -8, -16, 6, '#bde0fe'); circ(c, 4, -18, 4, '#bde0fe'); },
   gizmo(c) { box(c, -14, -18, 28, 36, '#d00000'); c.fillStyle = '#fff'; c.fillRect(-3, -10, 6, 20); c.fillRect(-10, -3, 20, 6); },
-  toaster(c) { box(c, -18, -12, 36, 26, '#adb5bd'); box(c, -10, -18, 6, 8, '#f4a261'); box(c, 4, -18, 6, 8, '#f4a261'); bolt(c); },
-  hairdryer(c) { box(c, -18, -12, 26, 16, '#ff70a6'); box(c, -8, 2, 8, 16, '#ff70a6'); box(c, 8, -10, 8, 12, '#555'); bolt(c); },
-  coil(c) { c.strokeStyle = '#b08968'; c.lineWidth = 4; c.beginPath(); for (let y = 16; y > -12; y -= 6) c.ellipse(0, y, 10, 3, 0, 0, Math.PI); c.stroke(); circ(c, 0, -16, 7, '#4cc9f0'); },
+  charm_toaster(c) { box(c, -18, -12, 36, 26, '#adb5bd'); box(c, -10, -18, 6, 8, '#f4a261'); box(c, 4, -18, 6, 8, '#f4a261'); bolt(c); },
+  charm_hairdryer(c) { box(c, -18, -12, 26, 16, '#ff70a6'); box(c, -8, 2, 8, 16, '#ff70a6'); box(c, 8, -10, 8, 12, '#555'); bolt(c); },
+  charm_storm(c) { c.strokeStyle = '#b08968'; c.lineWidth = 4; c.beginPath(); for (let y = 16; y > -12; y -= 6) c.ellipse(0, y, 10, 3, 0, 0, Math.PI); c.stroke(); circ(c, 0, -16, 7, '#4cc9f0'); },
+  charm_magnet(c) {
+    c.strokeStyle = '#e63946'; c.lineWidth = 9; c.beginPath(); c.arc(0, -2, 13, Math.PI, 0); c.stroke();
+    box(c, -17.5, -2, 9, 14, '#e63946'); box(c, 8.5, -2, 9, 14, '#e63946'); box(c, -17.5, 8, 9, 6, '#dee2e6'); box(c, 8.5, 8, 9, 6, '#dee2e6');
+  },
+  charm_lucky(c) {
+    for (const [x, y] of [[0, -10], [10, 0], [0, 10], [-10, 0]]) circ(c, x, y, 9, '#2dc653');
+    c.strokeStyle = '#1a7431'; c.lineWidth = 3; c.beginPath(); c.moveTo(2, 4); c.quadraticCurveTo(8, 14, 6, 22); c.stroke(); bolt(c);
+  },
   lamp(c) { circ(c, 0, -4, 12, '#fff3b0'); box(c, -6, 8, 12, 8, '#6c757d'); },
   biglamp(c) { circ(c, 0, -4, 18, '#fff3b0'); box(c, -8, 14, 16, 8, '#6c757d'); c.strokeStyle = '#ffd166'; c.lineWidth = 2; c.beginPath(); c.arc(0, -4, 22, 0, TAU); c.stroke(); },
   spring(c) { c.strokeStyle = '#adb5bd'; c.lineWidth = 4; c.beginPath(); for (let i = 0; i < 7; i++) c.lineTo(i % 2 ? 10 : -10, 18 - i * 6); c.stroke(); },
@@ -77,6 +94,7 @@ const ICONS = {
 function bolt(c) { c.fillStyle = '#ffd166'; c.beginPath(); c.moveTo(4, -26); c.lineTo(-4, -12); c.lineTo(2, -12); c.lineTo(-4, 0); c.lineTo(10, -16); c.lineTo(4, -16); c.closePath(); c.fill(); }
 
 export function drawItemIcon(c, it, x, y) {
+  if (drawArt(c, `icons/icon_${it.id}.png`, x - 32, y - 32, 64, 64)) return;
   c.save(); c.translate(x, y);
   if (it.hat && HATS[it.id]) { circ(c, 0, 10, 16, '#ffd7b5'); c.translate(0, 10); HATS[it.id](c); }
   else if (it.outfit && OUTFITS[it.id]) { c.translate(0, 42); c.scale(0.9, 0.9); OUTFITS[it.id](c); }

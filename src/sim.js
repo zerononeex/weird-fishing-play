@@ -23,7 +23,9 @@ export function createRun({ lineLength = 50, startDepth = 0 } = {}) {
     mode: 'descent', depth: startDepth, maxReached: startDepth, lineLength,
     lure: createLure(), fish: [], hooked: [], landed: [], t: 0,
     sinkMul: 1, reelMul: 1,
-    mulligans: 0, coil: false,   // Toaster/Hairdryer count; Zap Coil zaps every visible fish
+    charm: null, charges: 0,     // Hook Charm: zaps left this dive (refilled every cast, GAME_SPEC §10.E)
+    zapAll: false, zapBonus: 1,  // Storm Coil: each zap hits every visible fish · Lucky: zapped fish pay ×bonus
+    magnet: 0,                   // Magnet Charm: ascent pull radius in px (0 = none)
     saw: false, fuelMax: 0, fuel: 0, sawing: false, turbo: false, float: false, gizmo: false, gizmoIn: 0,
     touched: new Set(),          // species ids touched on the descent (for summon chains)
     fx: [],                      // events for sound/particles: { type, x, d }
@@ -90,14 +92,31 @@ export function isVisible(run, f) {
 
 export function land(run, f, how) {
   run.fish.splice(run.fish.indexOf(f), 1);
-  run.landed.push({ sp: f.sp, depth: f.d, how });
-  run.fx.push({ type: how, x: f.x, d: f.d });
+  const rec = { sp: f.sp, depth: f.d, how };
+  if (how === 'zap' && run.zapBonus > 1) rec.bonus = run.zapBonus;
+  run.landed.push(rec);
+  run.fx.push({ type: how, x: f.x, d: f.d, sp: f.sp, bonus: rec.bonus });
+}
+
+export const MAGNET = { SPEED: 140 }; // px/s [TUNE]
+
+// Magnet Charm (ascent): fish whose edge is within run.magnet px of the hook drift toward it.
+export function magnetStep(run, dt) {
+  if (!run.magnet || run.mode !== 'ascent') return;
+  for (const f of run.fish) {
+    if (f.sp.rarity === 'boss') continue;
+    const dx = run.lure.x - f.x, dy = (run.depth - f.d) * CONFIG.PX_PER_M, dist = Math.hypot(dx, dy);
+    if (dist < 1e-6 || dist - f.r > run.magnet) continue;
+    const k = Math.min(dist, MAGNET.SPEED * dt) / dist, dd = (dy * k) / CONFIG.PX_PER_M;
+    f.x += dx * k; f.d += dd;
+    if (f.home !== undefined) f.home += dd;
+  }
 }
 
 function hook(run, f) {
   run.fish.splice(run.fish.indexOf(f), 1);
   run.hooked.push(f);
-  run.fx.push({ type: 'hook', x: f.x, d: f.d });
+  run.fx.push({ type: 'hook', x: f.x, d: f.d, sp: f.sp });
 }
 
 // Resolves lure/fish contact for this frame. Returns 'touch' when the descent must end.
@@ -108,9 +127,9 @@ export function contact(run) {
     if (!run.fish.includes(f) || !touching(run, f)) continue;
     if (run.mode === 'ascent') { hook(run, f); continue; }
     run.touched.add(f.sp.id);
-    if (run.mulligans > 0) {
-      run.mulligans--;
-      if (run.coil) for (const g of run.fish.filter((g) => isVisible(run, g))) land(run, g, 'zap');
+    if (run.charges > 0) {               // Hook Charm: lightning, the dive continues
+      run.charges--;
+      if (run.zapAll) for (const g of run.fish.filter((g) => isVisible(run, g))) land(run, g, 'zap');
       else land(run, f, 'zap');
       continue;
     }

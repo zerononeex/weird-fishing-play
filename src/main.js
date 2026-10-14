@@ -1,11 +1,13 @@
 import { CONFIG } from './config.js';
-import { input, step as stepInput, getTilt, press, release, dragStart, dragMove, dragEnd, releaseAll, bindKeys } from './input.js';
-import { ui, beginFrame, hitButton, arrowButtons } from './ui.js';
+import { input, step as stepInput, routeDown, routeMove, routeUp, releaseAll, bindKeys } from './input.js';
+import { ui, beginFrame, hitButton } from './ui.js';
 import { G } from './game.js';
-import { unlock, setMuted, sfx, audioState, pauseAudio } from './audio.js';
+import { unlock, setMuted, sfx, audioState, pauseAudio, music, musicNow } from './audio.js';
+import { musicFor } from './musicmap.js';
 import { updateFx, shake } from './fx.js';
 import './play.js';
 import './screens.js';
+import './dock.js';
 
 const { W, H, FIXED_DT, MAX_STEPS } = CONFIG;
 const canvas = document.getElementById('game');
@@ -43,27 +45,22 @@ canvas.addEventListener('pointerdown', (e) => {
   unlock();
   canvas.setPointerCapture?.(e.pointerId);
   const p = toLogical(e), b = hitButton(p.x, p.y);
-  if (b?.hold) { press(input, b.hold, 'p' + e.pointerId, e.timeStamp); pointers.set(e.pointerId, { hold: b.hold }); return; }
-  if (b?.onTap) { sfx.tap(); b.onTap(p); return; }
-  if (sceneNow().pointerDown?.(p, e)) { pointers.set(e.pointerId, { scene: true }); return; }
-  if (sceneNow().steers !== false && ![...pointers.values()].some((v) => v.drag)) {
-    dragStart(input, p.x); pointers.set(e.pointerId, { drag: true });
-  }
-  if (sceneNow().steers !== false) { input.saw.add('p' + e.pointerId); pointers.set(e.pointerId, { ...pointers.get(e.pointerId), saw: true }); }
+  if (b?.onTap) { if (!b.silent) sfx.tap(); b.onTap(p); return; }
+  if (!b && sceneNow().pointerDown?.(p, e)) { pointers.set(e.pointerId, { scene: true }); return; }
+  const st = routeDown(input, 'p' + e.pointerId, p, b, e.timeStamp, sceneNow().steers !== false);
+  if (st) pointers.set(e.pointerId, st);
 });
 canvas.addEventListener('pointermove', (e) => {
   const st = pointers.get(e.pointerId); if (!st) return;
   const p = toLogical(e);
-  if (st.drag) dragMove(input, p.x);
   if (st.scene) sceneNow().pointerMove?.(p, e);
+  else routeMove(input, 'p' + e.pointerId, st, p, e.timeStamp);
 });
 const up = (e) => {
   const st = pointers.get(e.pointerId); if (!st) return;
   pointers.delete(e.pointerId);
-  if (st.hold) release(input, st.hold, 'p' + e.pointerId, e.timeStamp);
-  if (st.drag) dragEnd(input);
-  if (st.saw) input.saw.delete('p' + e.pointerId);
   if (st.scene) sceneNow().pointerUp?.(toLogical(e), e);
+  else routeUp(input, 'p' + e.pointerId, st, e.timeStamp);
 };
 canvas.addEventListener('pointerup', up);
 canvas.addEventListener('pointercancel', up);
@@ -82,7 +79,8 @@ document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: fal
 
 function update(dt) {
   time += dt; stepInput(input, dt); updateFx(dt);
-  setMuted(G.slot.settings.muted);
+  setMuted(G.slot.settings.muted, G.slot.settings.musicMuted);
+  music(musicFor(G.phase, G.run, G.runNo));
   if (!window.__wf?.freeze) sceneNow().update?.(dt);
 }
 function render() {
@@ -109,7 +107,7 @@ requestAnimationFrame(frame);
 
 // test hook for the smoke test
 window.__wf = {
-  W, H, get scale() { return scale; }, G, ui, freeze: false, audioState, frameMs,
+  W, H, get scale() { return scale; }, G, ui, freeze: false, audioState, musicNow, frameMs,
   lum() { // mean luminance of the canvas, 0..255
     const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let s = 0; for (let i = 0; i < d.length; i += 16) s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];

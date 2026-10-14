@@ -2,7 +2,7 @@
 import { fishPay, runTotal, discover, refreshUnlocks, grantGifts } from './economy.js';
 
 export function settleRun(slot, run, shoot) {
-  const ctx = { outfit: slot.equip.outfit, zoneId: run.zone.id };
+  const ctx = { outfit: slot.equip.outfit, hat: slot.equip.hat, zoneId: run.zone.id };
   const fishes = [...shoot.landed, ...run.landed];
   const rows = new Map();
   for (const f of fishes) {

@@ -2,18 +2,19 @@
 import { CONFIG } from './config.js';
 import { G } from './game.js';
 import { getTilt } from './input.js';
-import { arrowButtons } from './ui.js';
-import { createRun, moveRun, contact, sawStep, screenY, PHYS } from './sim.js';
+import { arrowButtons, sawButton } from './ui.js';
+import { createRun, moveRun, contact, sawStep, magnetStep, screenY, PHYS } from './sim.js';
 import { addButton } from './ui.js';
 import { createSpawner, spawnTo, moveFish, makeFish, makeAllowed, placeGuaranteed, summon, AHEAD } from './fish.js';
 import { BY_ID } from './data/fish.js';
 import { ZONES, light, lampRadius } from './data/zones.js';
 import { drawFish } from './fishart.js';
-import { drawSea, drawLure, drawLine, drawArrows, text, lerpRgb, drawBoat, drawSky, drawCrosshair } from './draw.js';
+import { drawSea, drawLure, drawLine, drawArrows, drawSawButton, text, lerpRgb, drawBoat, drawSky, drawCrosshair } from './draw.js';
 import { createShoot, stepShoot, SHOOT } from './shoot.js';
-import { GUN } from './data/shop.js';
-import { wearDrawer } from './icons.js';
-import { sfx } from './audio.js';
+import { GUN, ITEM } from './data/shop.js';
+import { wearDrawer, drawItemIcon } from './icons.js';
+import { art, drawArt } from './art.js';
+import { sfx, sawLoop } from './audio.js';
 import { burst, popup, quake, drawFx, clearFx } from './fx.js';
 import { fishPay } from './economy.js';
 import { input } from './input.js';
@@ -31,7 +32,8 @@ export function startRun(opts) {
   const zone = opts.zone || ZONES[0];
   G.run = createRun({ lineLength: Math.min(opts.lineLength, zone.maxDepth), startDepth: opts.startDepth || 0 });
   Object.assign(G.run, opts.gear || {});
-  G.run.fuel = G.run.fuelMax;   // fuel refills at every cast
+  G.run.fuel = G.run.fuelMax;   // fuel and charm charges refill at every cast
+  G.run.chargesMax = G.run.charges;
   G.run.zone = zone;
   G.run.night = !!opts.cond?.night;
   allowed = makeAllowed({ hour: new Date().getHours(), ...opts.cond, touched: G.run.touched });
@@ -52,7 +54,7 @@ function placeBoss(zone, allowed) {
 
 function knifeButton(ctx) {
   if (!G.run.knife) return;
-  addButton({ x: W - 96, y: 24, w: 76, h: 76, onTap: () => G.go('knife') });
+  addButton({ x: W - 96, y: 24, w: 76, h: 76, onTap: () => { sfx.knife(); sawLoop(false); G.go('knife'); }, silent: true, label: 'KNIFE' });
   ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(W - 58, 62, 36, 0, Math.PI * 2); ctx.fill();
   ctx.save(); ctx.translate(W - 58, 62); ctx.rotate(-0.7);
   ctx.fillStyle = '#e8eef3'; ctx.beginPath(); ctx.moveTo(-4, -26); ctx.lineTo(6, -26); ctx.lineTo(4, 6); ctx.lineTo(-4, 6); ctx.fill();
@@ -89,6 +91,48 @@ function fuelBar(ctx, run) {
   text(ctx, 'SAW', 24 + w / 2, 41, 16, '#3a2600');
 }
 
+// Hook Charm lightning: jagged bolts from the sky to each zapped fish, plus a white flash.
+const bolts = [];
+let flash = 0;
+function strike(x, y) {
+  const pts = [[x + (Math.random() - 0.5) * 60, -10]];
+  for (let k = 1; k <= 7; k++) pts.push([x + (Math.random() - 0.5) * 50 * (1 - k / 8), (y * k) / 7]);
+  pts[pts.length - 1] = [x, y];
+  if (bolts.length < 12) bolts.push({ pts, life: 0.3 });
+  flash = 0.18;
+}
+function drawBolts(ctx) {
+  if (flash > 0) { ctx.fillStyle = `rgba(255,255,240,${(flash / 0.18) * 0.45})`; ctx.fillRect(0, 0, W, H); }
+  const im = art('fx/lightning.png');
+  for (const b of bolts) {
+    ctx.globalAlpha = Math.max(0, b.life / 0.3);
+    if (im) { const [x, y] = b.pts[b.pts.length - 1]; ctx.drawImage(im, x - 36, -10, 72, y + 10); continue; }
+    for (const [w, col] of [[10, 'rgba(160,220,255,0.6)'], [4, '#fffbe0']]) {
+      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineJoin = 'round'; ctx.beginPath();
+      b.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+function stepBolts(dt) {
+  flash = Math.max(0, flash - dt);
+  for (let i = bolts.length - 1; i >= 0; i--) if ((bolts[i].life -= dt) <= 0) bolts.splice(i, 1);
+}
+
+// Equipped charm icon + charge pips next to the hook (descent only).
+function charmPips(ctx, run) {
+  if (!run.charm || run.mode !== 'descent' || !run.chargesMax) return;
+  const x = run.lure.x + (run.lure.x > W - 120 ? -64 : 64), y = lureY;
+  ctx.fillStyle = 'rgba(0,30,50,0.45)'; ctx.beginPath(); ctx.arc(x, y - 6, 24, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(x, y - 6); ctx.scale(0.75, 0.75); drawItemIcon(ctx, ITEM[run.charm], 0, 0); ctx.restore();
+  for (let i = 0; i < run.chargesMax; i++) {
+    const px = x - (run.chargesMax - 1) * 9 + i * 18;
+    ctx.fillStyle = i < run.charges ? '#ffee32' : 'rgba(255,255,255,0.25)';
+    ctx.beginPath(); ctx.arc(px, y + 28, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,30,50,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+  }
+}
+
 const fishY = (run, f) => screenY(run, f.d, lureY);
 function drawSchool(ctx, run, t, glow) {
   for (const f of run.fish) {
@@ -103,7 +147,7 @@ export function renderWorld(ctx, t) {
   const run = G.run;
   let [top, bottom] = seaColors(run.zone, run.depth);
   if (run.night) { top = top.map((c) => c * 0.45); bottom = bottom.map((c) => c * 0.6); }
-  drawSea(ctx, top, bottom, run.depth * PX_PER_M, t);
+  drawSea(ctx, top, bottom, run.depth * PX_PER_M, t, run.zone.bg);
   const surfY = screenY(run, 0, lureY);
   if (surfY > -40) {
     ctx.fillStyle = '#bfefff'; ctx.fillRect(0, 0, W, Math.max(0, surfY));
@@ -120,6 +164,8 @@ export function renderWorld(ctx, t) {
   drawLure(ctx, run.lure.x, lureY, t, run.sawing);
   darkness(ctx, run);
   drawSchool(ctx, run, t, true);
+  charmPips(ctx, run);
+  drawBolts(ctx);
   if (run.saw) fuelBar(ctx, run);
   text(ctx, `${Math.floor(run.depth)} m`, W / 2, 50, 40);
   if (Number.isFinite(run.lineLength)) text(ctx, `line ${run.lineLength} m`, W / 2, 92, 20, '#cfe9ff');
@@ -130,60 +176,81 @@ const play = {
     spawnTo(G.run, spawner, G.run.depth + AHEAD);
     moveFish(G.run, dt);
     sawStep(G.run, dt, input.saw.size > 0);
+    magnetStep(G.run, dt);
+    stepBolts(dt);
     const ev = moveRun(G.run, dt, getTilt()) || contact(G.run);
     summon(G.run, G.run.zone, allowed);
-    if (G.run.sawing) sfx.saw();
+    sawLoop(G.run.sawing);
     for (const e of G.run.fx.splice(0)) {
       const y = screenY(G.run, e.d, lureY);
-      if (e.type === 'hook') { sfx.hook(); burst(e.x, y, '#bde0fe', 6, 120); }
-      if (e.type === 'zap') { sfx.zap(); burst(e.x, y, '#ffee32', 14, 260); quake(5); }
-      if (e.type === 'saw') { burst(e.x, y, '#ff8fa3', 10, 220); }
+      if (e.type === 'hook') { sfx.hook(); burst(e.x, y, '#bde0fe', 6, 120); if (e.sp.rarity === 'boss') sfx.boss(); }
+      if (e.type === 'zap' || e.type === 'saw') {
+        const pay = Math.round(fishPay({ sp: e.sp, d: e.d, bonus: e.bonus }, payCtx()));
+        popup(e.x, y - 24, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}`, pay < 0 ? '#ff8fa3' : '#ffe066');
+      }
+      if (e.type === 'zap') { sfx.zap(); strike(e.x, y); burst(e.x, y, '#ffee32', 14, 260); quake(5); }
+      if (e.type === 'saw') { sfx.sawCut(); burst(e.x, y, '#ff8fa3', 10, 220); }
     }
     const target = H * (G.run.mode === 'ascent' ? PHYS.LURE_Y_ASCENT : PHYS.LURE_Y_DESCENT);
     lureY += (target - lureY) * Math.min(1, dt * 3);
-    if (ev === 'touch' || ev === 'maxDepth') sfx.reel();
+    if (ev === 'touch') sfx.thud();
+    if (ev === 'maxDepth') sfx.taut();
+    if (ev) sawLoop(false);
     if (ev) G.go(ev);
   },
-  render(ctx, t) { renderWorld(ctx, t); drawFx(ctx); arrowButtons(); drawArrows(ctx, input); knifeButton(ctx); },
+  render(ctx, t) {
+    renderWorld(ctx, t); drawFx(ctx);
+    arrowButtons(); drawArrows(ctx, input);
+    if (G.run.saw) { sawButton(); drawSawButton(ctx, input, t); }
+    knifeButton(ctx);
+  },
 };
 
 G.scenes.cast = {
   steers: false,
-  enter() { timer = CAST_S; clearFx(); sfx.splash(); burst(G.run.lure.x, lureY, '#ffffff', 16, 220, 0.6); },
+  enter() { timer = CAST_S; clearFx(); bolts.length = 0; flash = 0; sfx.splash(); burst(G.run.lure.x, lureY, '#ffffff', 16, 220, 0.6); },
   update(dt) { if ((timer -= dt) <= 0) G.go('done'); },
-  render(ctx, t) { renderWorld(ctx, t); text(ctx, 'SPLASH!', W / 2, H * 0.55, 64, '#fff'); },
+  render(ctx, t) {
+    renderWorld(ctx, t);
+    ctx.globalAlpha = Math.max(0, timer / CAST_S); drawArt(ctx, 'fx/splash.png', G.run.lure.x - 90, lureY - 120, 180, 180); ctx.globalAlpha = 1;
+    text(ctx, 'SPLASH!', W / 2, H * 0.55, 64, '#fff');
+  },
 };
-G.scenes.descent = { ...play, enter() { G.run.mode = 'descent'; } };
+G.scenes.descent = { ...play, enter() { G.run.mode = 'descent'; sfx.plop(); } };
 G.scenes.turn = {
-  enter() { timer = TURN_S; G.run.mode = 'turn'; },
+  enter() { timer = TURN_S; G.run.mode = 'turn'; sfx.reel(); },
   update(dt) {
     moveRun(G.run, dt, getTilt());
     if ((timer -= dt) <= 0) G.go('done');
   },
   render(ctx, t) { play.render(ctx, t); text(ctx, 'REEL IT IN!', W / 2, H * 0.5, 56, '#ffd166'); },
 };
-G.scenes.ascent = { ...play, enter() { G.run.mode = 'ascent'; } };
+G.scenes.ascent = { ...play, enter() { G.run.mode = 'ascent'; sfx.reelStart(); } };
 
 // ---- surface: launch + shooting ----
 const gun = () => GUN[G.slot.equip.gun] || GUN.pistol;
+const payCtx = () => ({ outfit: G.slot.equip.outfit, hat: G.slot.equip.hat, zoneId: G.run.zone.id });
 
 G.scenes.launch = {
   steers: false,
-  enter() { G.shoot = createShoot(G.run.hooked, G.run, G.run.lure.x); G.go('done'); },
+  enter() { G.runNo++; sawLoop(false); G.shoot = createShoot(G.run.hooked, G.run, G.run.lure.x); if (G.run.hooked.length) sfx.launch(); G.go('done'); },
 };
 
 G.scenes.shoot = {
   steers: false,
   update(dt) {
-    const s = G.shoot, fired = s.fired, hits = s.hits, landed = s.landed.length;
+    const s = G.shoot, fired = s.fired, hits = s.hits, landed = s.landed.length, lost = s.lost.length;
     const done = stepShoot(s, dt, gun());
-    if (s.fired > fired) sfx.shot(gun().pellets);
+    if (s.fired > fired) sfx.shot(gun());
     if (s.hits > hits) sfx.hit();
+    if (s.lost.length > lost) sfx.lost();
     for (const f of s.landed.slice(landed)) {
-      const pay = Math.round(fishPay(f, { outfit: G.slot.equip.outfit, zoneId: G.run.zone.id }));
+      const pay = Math.round(fishPay(f, payCtx()));
+      sfx.splat();
       if (pay < 0) sfx.ouch(); else sfx.coin();
       if (f.sp.rarity === 'boss') { sfx.boss(); quake(12, 0.5); }
-      burst(f.x, f.y, f.sp.color, 14, 240); popup(f.x, f.y - 20, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}`, pay < 0 ? '#ff8fa3' : '#ffe066');
+      const y = f.y - s.cam;
+      burst(f.x, y, f.sp.color, 14, 240); popup(f.x, y - 20, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}`, pay < 0 ? '#ff8fa3' : '#ffe066');
     }
     if (done) G.go('noAirborne');
   },
@@ -191,10 +258,13 @@ G.scenes.shoot = {
   pointerMove(p) { Object.assign(G.shoot.pointer, p); },
   pointerUp() { G.shoot.pointer.down = false; },
   render(ctx, t) {
-    const s = G.shoot;
-    drawSky(ctx, SHOOT.WATER, t, G.run.night);
-    drawBoat(ctx, s.x0, SHOOT.WATER + 4, t, G.slot.color, wearDrawer(G.slot.equip),
-      G.slot.flags.bossBeaten ? (c) => drawFish(c, BY_ID.get(47), -44, -40, 16, -1, t) : null);
+    const s = G.shoot, cam = s.cam;
+    drawSky(ctx, SHOOT.WATER, t, G.run.night, cam);
+    ctx.save(); ctx.translate(0, -cam);
+    if (SHOOT.WATER + 4 - cam < H + 140) {
+      drawBoat(ctx, s.x0, SHOOT.WATER + 4, t, G.slot.color, wearDrawer(G.slot.equip),
+        G.slot.flags.bossBeaten ? (c) => drawFish(c, BY_ID.get(47), -44, -40, 16, -1, t) : null);
+    }
     for (const f of s.air) {
       ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.spin);
       if (f.hit > 0) ctx.globalAlpha = 0.6 + Math.sin(f.hit * 80) * 0.4;
@@ -206,9 +276,20 @@ G.scenes.shoot = {
       ctx.fillStyle = `rgba(255,230,120,${1 - age / 0.15})`;
       ctx.beginPath(); ctx.arc(p.x, p.y, 7 * (1 - age / 0.15) + 2, 0, Math.PI * 2); ctx.fill();
     }
+    ctx.restore();
+    // fish above / below the view: a small arrow at the edge so kids know where to look
+    for (const f of s.air) {
+      const y = f.y - cam;
+      if (y > -f.r && y < H + f.r) continue;
+      const top = y < 0, ay = top ? 18 : H - 18;
+      ctx.fillStyle = 'rgba(255,209,102,0.9)'; ctx.beginPath();
+      ctx.moveTo(f.x, ay + (top ? -10 : 10)); ctx.lineTo(f.x - 12, ay + (top ? 8 : -8)); ctx.lineTo(f.x + 12, ay + (top ? 8 : -8)); ctx.fill();
+    }
     drawFx(ctx);
     if (s.pointer.down) drawCrosshair(ctx, s.pointer.x, s.pointer.y, gun().spread, true);
-    text(ctx, 'TAP & HOLD TO SHOOT!', W / 2, 60, 30, '#fff');
-    text(ctx, gun().name, W / 2, 100, 20, '#cfe9ff');
+    if (cam > -200) {
+      text(ctx, 'TAP & HOLD TO SHOOT!', W / 2, 60, 30, '#fff');
+      text(ctx, gun().name, W / 2, 100, 20, '#cfe9ff');
+    }
   },
 };

@@ -1,3 +1,5 @@
+import { art } from './art.js';
+
 // Code-drawn species art. Every shape is drawn in a 20-unit frame facing right, then scaled to the
 // fish radius and flipped by heading. No image files.
 const TAU = Math.PI * 2;
@@ -252,8 +254,16 @@ function star(c, x, y, r, fill) {
 
 // Draws species `sp` centred at (x, y) with radius r, heading dir (±1).
 // opts.silhouette draws a flat dark shape (for undiscovered fish in the book).
+export const fishArtPath = (sp) => `fish/fish_${String(sp.id).padStart(2, '0')}.png`;
 export function drawFish(ctx, sp, x, y, r, dir, t, opts = {}) {
   if (opts.silhouette) return drawSilhouette(ctx, sp, x, y, r, dir);
+  const im = art(fishArtPath(sp));
+  if (im) { // sprite art faces right; the body spans ~2.6 r wide, with a little wobble
+    const w = r * 2.8, h = (w * im.naturalHeight) / im.naturalWidth;
+    ctx.save(); ctx.translate(x, y); ctx.scale(dir < 0 ? -1 : 1, 1); ctx.rotate(Math.sin(t * 6 + sp.id) * 0.05);
+    ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.translate(x, y);
   ctx.scale((dir < 0 ? -1 : 1) * (r / 20), r / 20);
@@ -263,7 +273,7 @@ export function drawFish(ctx, sp, x, y, r, dir, t, opts = {}) {
 
 const silCache = new Map();
 function drawSilhouette(ctx, sp, x, y, r, dir) {
-  const key = sp.id + ':' + r;
+  const key = sp.id + ':' + r + (art(fishArtPath(sp)) ? 'a' : 'c'); // re-cache once the sprite has loaded
   let c = silCache.get(key);
   if (!c) {
     const size = Math.ceil(r * 3.2);

@@ -5,6 +5,7 @@ import { freshSlot, load, save } from './save.js';
 export const G = {
   phase: 'title',
   run: null,
+  runNo: 0,   // launches so far this session (rotates the shooting music)
   data: null,
   slot: freshSlot(0),
   // Loads the 3-slot save and picks the active kid (creating the slot on first use).
