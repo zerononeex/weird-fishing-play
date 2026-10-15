@@ -14,6 +14,7 @@ import { sfx } from './audio.js';
 import { PRESET_NAMES, PRESET_COLORS, freshSlot } from './save.js';
 import { drawFish, drawFishSprite, fishArtPath } from './fishart.js';
 import { art } from './art.js';
+import { codeUI, openExport, openImport, pickSlot } from './codeui.js';
 
 const { W, H } = CONFIG;
 
@@ -255,23 +256,30 @@ G.scenes.dex = {
 };
 // ---- kid slots ----
 const cycle = (list, v, d = 1) => list[(list.indexOf(v) + d + list.length) % list.length];
+export const SLOT_CARD = { Y: 116, STEP: 240, H: 228 }; // v1.3: a touch shorter, to fit the Import code button
 G.scenes.slots = {
   steers: false,
   render(ctx, t) {
+    const picking = codeUI.mode === 'pick';
     drawSea(ctx, [120, 210, 245], [20, 90, 140], 0, t);
-    text(ctx, "Who's fishing?", W / 2, 80, 48);
+    text(ctx, picking ? 'Pick a slot' : "Who's fishing?", W / 2, 62, 46);
     G.data.slots.forEach((slot, i) => {
-      const y = 140 + i * 260, view = slot || freshSlot(i);
-      const card = addButton({ x: 24, y, w: W - 48, h: 240, onTap: () => { sfx.kidPick(); G.useSlot(i); G.go('pick'); }, label: 'slot' + i, silent: true });
+      const y = SLOT_CARD.Y + i * SLOT_CARD.STEP, view = slot || freshSlot(i);
+      // decided at tap time: the panel can change mode between this frame and the tap
+      const tap = () => { if (codeUI.mode === 'pick') pickSlot(i); else if (!codeUI.mode) { sfx.kidPick(); G.useSlot(i); G.go('pick'); } };
+      const card = addButton({ x: 24, y, w: W - 48, h: SLOT_CARD.H, onTap: tap, label: 'slot' + i, silent: true });
       ctx.fillStyle = view.color; rr(ctx, card.x, card.y, card.w, card.h, 26); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 5; ctx.stroke();
-      drawBoat(ctx, 110, y + 200, t + i, view.color === '#ffd166' ? '#ff6b9a' : '#ffd166', wearDrawer(view.equip));
-      text(ctx, view.name, 330, y + 60, 34, '#fff');
-      text(ctx, slot ? `$${slot.cash.toLocaleString()} · ${Object.keys(slot.dex).length}/66 fish` : 'New player!', 330, y + 108, 22, '#fff');
-      text(ctx, 'tap to play', 330, y + 146, 20, 'rgba(255,255,255,0.85)');
-      const ensure = () => (G.data.slots[i] ||= freshSlot(i));
-      bigButton(ctx, 210, y + 170, 140, 56, 'name', () => { const s = ensure(); s.name = cycle(PRESET_NAMES, s.name); G.persist(); }, { color: '#fff', size: 20 });
-      bigButton(ctx, 370, y + 170, 140, 56, 'colour', () => { const s = ensure(); s.color = cycle(PRESET_COLORS, s.color); G.persist(); }, { color: '#fff', size: 20 });
+      ctx.strokeStyle = !picking ? 'rgba(255,255,255,0.8)' : codeUI.confirm === i ? '#ff4d6d' : '#ffe066'; ctx.lineWidth = picking ? 8 : 5; ctx.stroke();
+      drawBoat(ctx, 110, y + 196, t + i, view.color === '#ffd166' ? '#ff6b9a' : '#ffd166', wearDrawer(view.equip));
+      text(ctx, view.name, 340, y + 44, 34, '#fff');
+      text(ctx, slot ? `$${slot.cash.toLocaleString()} · ${Object.keys(slot.dex).length}/66 fish` : 'New player!', 340, y + 88, 22, '#fff');
+      text(ctx, picking ? (slot ? 'tap to replace' : 'tap to load here') : 'tap to play', 340, y + 122, 20, 'rgba(255,255,255,0.85)');
+      if (picking) return;
+      const ensure = () => (G.data.slots[i] ||= freshSlot(i)), free = () => !codeUI.mode;
+      bigButton(ctx, 196, y + 148, 98, 64, 'name', () => { if (!free()) return; const s = ensure(); s.name = cycle(PRESET_NAMES, s.name); G.persist(); }, { color: '#fff', size: 20 });
+      bigButton(ctx, 302, y + 148, 98, 64, 'colour', () => { if (!free()) return; const s = ensure(); s.color = cycle(PRESET_COLORS, s.color); G.persist(); }, { color: '#fff', size: 20 });
+      if (slot) bigButton(ctx, 408, y + 148, 100, 64, 'Share code', () => { if (free()) { sfx.open(); openExport(i); } }, { color: '#bde0fe', size: 16, silent: true });
     });
+    if (!picking) bigButton(ctx, 100, 846, 340, 90, 'Import code', () => { if (!codeUI.mode) { sfx.open(); openImport(); } }, { color: '#8ac926', size: 32, silent: true });
   },
 };

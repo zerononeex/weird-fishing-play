@@ -87,6 +87,7 @@ export const getTilt = () => tiltOf(input);
 const KEYS = { ArrowLeft: -1, KeyA: -1, ArrowRight: 1, KeyD: 1 };
 export function bindKeys(target) {
   target.addEventListener('keydown', (e) => {
+    if (e.target?.tagName === 'TEXTAREA') return; // typing / pasting a save code
     const dir = KEYS[e.code];
     if (dir && !e.repeat) { press(input, dir, e.code, performance.now()); e.preventDefault(); }
     if (e.code === 'Space') { input.saw.add('Space'); e.preventDefault(); }

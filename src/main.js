@@ -6,6 +6,7 @@ import { unlock, setMuted, sfx, audioState, pauseAudio, music, musicNow, sfxStat
 import { artStats } from './art.js';
 import { musicFor } from './musicmap.js';
 import { updateFx, shake } from './fx.js';
+import { place as placeCodeUI } from './codeui.js';
 import './play.js';
 import './screens.js';
 import './dock.js';
@@ -27,6 +28,7 @@ function fit() {
   canvas.height = Math.round(H * scale * dpr);
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
   rotate.style.width = Math.max(0, (vw - W * scale) / 2) + 'px';
+  placeCodeUI();
 }
 addEventListener('resize', fit);
 addEventListener('orientationchange', () => setTimeout(fit, 200));
@@ -76,7 +78,7 @@ document.addEventListener('visibilitychange', () => {
   pauseAudio(paused);
 });
 for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
-document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', (e) => { if (!e.target.closest?.('#codeui .ta')) e.preventDefault(); }, { passive: false }); // the save-code box scrolls
 
 function update(dt) {
   time += dt; stepInput(input, dt); updateFx(dt);
