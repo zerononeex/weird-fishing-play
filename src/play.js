@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import { G } from './game.js';
 import { getTilt } from './input.js';
 import { arrowButtons, sawButton } from './ui.js';
-import { createRun, moveRun, contact, sawStep, magnetStep, screenY, PHYS } from './sim.js';
+import { createRun, moveRun, contact, sawStep, magnetStep, spotGolden, screenY, PHYS } from './sim.js';
 import { addButton } from './ui.js';
 import { createSpawner, spawnTo, moveFish, makeFish, makeAllowed, placeGuaranteed, summon, AHEAD } from './fish.js';
 import { BY_ID } from './data/fish.js';
@@ -213,10 +213,13 @@ const play = {
     stepBolts(dt);
     const ev = moveRun(G.run, dt, getTilt()) || contact(G.run);
     summon(G.run, G.run.zone, allowed);
+    spotGolden(G.run);
     sawLoop(G.run.sawing);
     for (const e of G.run.fx.splice(0)) {
       const y = screenY(G.run, e.d, lureY);
-      if (e.type === 'hook') { sfx.hook(); burst(e.x, y, e.golden ? '#ffd23f' : '#bde0fe', e.golden ? 14 : 6, 120); if (e.golden) sfx.sparkle(); if (e.sp.rarity === 'boss') sfx.boss(); }
+      if (e.type === 'hook') { sfx.hook(); burst(e.x, y, e.golden ? '#ffd23f' : '#bde0fe', e.golden ? 14 : 6, 120); if (e.golden) sfx.shine(); if (e.sp.rarity === 'boss') sfx.boss(); }
+      if (e.type === 'golden') { sfx.shine(); burst(e.x, y, '#ffd23f', 10, 160); }
+      if ((e.type === 'zap' || e.type === 'saw') && e.golden) sfx.shine();
       if (e.type === 'zap' || e.type === 'saw') {
         const pay = Math.round(fishPay({ sp: e.sp, d: e.d, bonus: e.bonus, golden: e.golden }, payCtx()));
         popup(e.x, y - 24, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}${e.golden ? ' GOLD!' : ''}`, pay < 0 ? '#ff8fa3' : '#ffe066');
@@ -281,6 +284,7 @@ G.scenes.shoot = {
       const pay = Math.round(fishPay(f, payCtx()));
       sfx.splat();
       if (pay < 0) sfx.ouch(); else sfx.coin();
+      if (f.golden) sfx.shine();
       if (f.sp.rarity === 'boss') { sfx.boss(); quake(12, 0.5); }
       const { x, y } = toScreen(s, f.x, f.y);
       burst(x, y, f.golden ? '#ffd23f' : f.sp.color, f.golden ? 28 : 14, 240);

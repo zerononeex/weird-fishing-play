@@ -89,6 +89,16 @@ export function isVisible(run, f) {
   return y > -f.r && y < CONFIG.H + f.r;
 }
 
+// Golden fish (v1.4): the first frame a golden fish is on screen it pushes one 'golden' fx (sfx_golden_shine).
+// f.seen sticks to the fish, so scrolling off and back on, or the turn to the ascent, never fires it again.
+export function spotGolden(run) {
+  for (const f of run.fish) {
+    if (!f.golden || f.seen || !isVisible(run, f)) continue;
+    f.seen = true;
+    run.fx.push({ type: 'golden', x: f.x, d: f.d, sp: f.sp, golden: true });
+  }
+}
+
 export function land(run, f, how) {
   run.fish.splice(run.fish.indexOf(f), 1);
   const rec = { sp: f.sp, depth: f.d, how };

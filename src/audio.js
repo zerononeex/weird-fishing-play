@@ -103,6 +103,7 @@ const SYNTH = {
   sfx_new_species: () => arp([784, 988, 1175, 1568, 1976], 0.08, { type: 'sine', vol: 0.12, dur: 0.2 }),
   sfx_zone_unlock: () => arp([392, 523, 659, 784, 1047], 0.1, { type: 'triangle', vol: 0.13, dur: 0.3 }),
   sfx_no_catch: () => arp([392, 370, 349], 0.18, { type: 'triangle', vol: 0.1, dur: 0.25 }),
+  sfx_golden_shine: () => { arp([1047, 1319, 1568, 2093, 2637], 0.06, { type: 'sine', vol: 0.1, dur: 0.3 }); noise(0.5, { vol: 0.05, freq: 8000, q: 2, at: 0.3 }); },
 };
 
 // ---- MP3 one-shots ----
@@ -153,7 +154,7 @@ export const sfx = {
   hit: () => play('sfx_fish_hit', 0.04), splat: () => play('sfx_fish_splat', 0.05), coin: () => play('sfx_coin', 0.05),
   lost: () => play('sfx_fish_lost', 0.08), ouch: () => play('sfx_jelly_sting', 0.1), tally: () => play('sfx_cash_tally', 0.07),
   tada: () => play('sfx_payout_fanfare'), newSpecies: () => play('sfx_new_species'), zoneUnlock: () => play('sfx_zone_unlock'),
-  noCatch: () => play('sfx_no_catch'),
+  noCatch: () => play('sfx_no_catch'), shine: () => play('sfx_golden_shine'),
 };
 
 // ---- music: one track per key with ~1 s crossfades ----
@@ -165,6 +166,10 @@ const FLAVOUR = {
   music_title: { bpm: 96, tr: 0 }, music_shop: { bpm: 104, tr: 5, lead: 'triangle' },
   music_dive_puddle: { bpm: 100, tr: 0 }, music_dive_grumble: { bpm: 96, tr: -3 }, music_dive_iceberg: { bpm: 88, tr: 4, sparse: true },
   music_dive_whirlpool: { bpm: 108, tr: -5 }, music_deep: { bpm: 70, tr: -12, sparse: true, lead: 'sine' },
+  // v1.4 seas, voiced after their MUSIC_PROMPTS moods: dreamy pulse, echoing sparse, warm bubbling, sparse moonlit, broad gentle
+  music_dive_jellyfish: { bpm: 78, tr: 2, lead: 'sine' }, music_dive_sunken: { bpm: 72, tr: -5, sparse: true, lead: 'triangle' },
+  music_dive_volcano: { bpm: 88, tr: -8, lead: 'triangle', hat: 2 }, music_dive_trench: { bpm: 62, tr: -7, sparse: true, lead: 'sine' },
+  music_dive_dragon: { bpm: 80, tr: 2, lead: 'triangle' },
   music_boss: { bpm: 120, tr: -7, hat: 2 }, music_ending: { bpm: 80, tr: 7, lead: 'sine' },
   music_shoot_a: { bpm: 150, tr: 2, hat: 2 }, music_shoot_b: { bpm: 150, tr: 7, hat: 2, lead: 'square' }, music_shoot_c: { bpm: 146, tr: -2, hat: 2, lead: 'sawtooth' },
 };
@@ -219,6 +224,7 @@ export function music(key) {
   try { startTrack(key); } catch { /* keep playing whatever was on */ }
 }
 
+export const synthKeys = () => ({ music: Object.keys(FLAVOUR), sfx: Object.keys(SYNTH) }); // tests: every key has a fallback
 export const audioState = () => (ac ? ac.state : 'off');
 export const sfxStats = () => ({ decoded: buffers.size, failed: [...failed] });
 export const musicNow = () => current && { key: current.key, file: !!current.inner?.el && !failed.has(current.key) };

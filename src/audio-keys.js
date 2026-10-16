@@ -1,6 +1,7 @@
 // Every audio key the game plays (docs/MUSIC_PROMPTS.md has one entry per key). Pure data.
 export const MUSIC_KEYS = [
   'music_title', 'music_dive_puddle', 'music_dive_grumble', 'music_dive_iceberg', 'music_dive_whirlpool', 'music_deep',
+  'music_dive_jellyfish', 'music_dive_sunken', 'music_dive_volcano', 'music_dive_trench', 'music_dive_dragon', // v1.4 seas
   'music_shoot_a', 'music_shoot_b', 'music_shoot_c', 'music_shop', 'music_boss', 'music_ending',
 ];
 export const SFX_KEYS = [
@@ -13,6 +14,8 @@ export const SFX_KEYS = [
   // the sky
   'sfx_launch_whoosh', 'sfx_gun_pistol', 'sfx_gun_shotgun', 'sfx_gun_smg', 'sfx_gun_cannon', 'sfx_gun_beam',
   'sfx_fish_hit', 'sfx_fish_splat', 'sfx_coin', 'sfx_fish_lost', 'sfx_jelly_sting',
+  // golden fish (v1.4): appears on screen in a dive, and again when caught or shot down
+  'sfx_golden_shine',
   // payout
   'sfx_cash_tally', 'sfx_payout_fanfare', 'sfx_new_species', 'sfx_zone_unlock', 'sfx_no_catch',
 ];

@@ -6,7 +6,7 @@ export const BOSS_WATER = 30; // metres above the bottom of every zone with a bo
 export function diveTrack(zone, d) {
   if (zone.boss && Number.isFinite(zone.maxDepth) && d >= zone.maxDepth - BOSS_WATER) return 'music_boss';
   if (zone.dark.some(([a, b]) => d >= a && d < b)) return 'music_deep';
-  return zone.music || 'music_dive_' + zone.key; // v1.4: the five new seas reuse the four zone tracks
+  return zone.music || 'music_dive_' + zone.key;
 }
 
 // runNo counts launches so the three shooting tracks rotate per run.
