@@ -23,7 +23,7 @@ export function density(zone, d) {
   return 6 + 6 * (d / zone.maxDepth);
 }
 
-export const jellyShare = (zone) => (zone.id === 4 ? 0.2 : 0.15);
+export const jellyShare = (zone) => zone.jellyShare ?? 0.15;
 
 // Species eligible in this zone, with their band for this zone.
 function poolFor(zone) {
@@ -33,9 +33,25 @@ function poolFor(zone) {
   return own.concat(extra);
 }
 
+// ---- Golden fish (v1.4, GAME_SPEC §13) ----
+// Each 100 m band of a dive (100-199 m, 200-299 m, ...) rolls CHANCE once: on a hit, the first regular fish spawned
+// in that band is golden (never a boss or a jelly). The roll is a pure function of (seed, band), so it is
+// deterministic per run and independent of how far ahead the spawner runs. [TUNE]
+export const GOLD = { CHANCE: 0.3, EVERY: 100, PAY: 5, HP: 3, SPEED: 1.3, WOBBLE: 40 };
+export const goldBand = (seed, band) => band >= 1 && mulberry32(Math.imul(seed | 0, 0x9e3779b1) ^ Math.imul(band, 0x85ebca6b))() < GOLD.CHANCE;
+export const canBeGolden = (sp) => sp.rarity !== 'boss' && !sp.jelly;
+
 // ctx.allowed(sp) decides conditions (clock, hats, post-game...). Default: no conditional species.
 export function createSpawner(zone, { seed = 1, allowed = (sp) => sp.cond.length === 0 } = {}) {
-  return { zone, rng: mulberry32(seed), pool: poolFor(zone), allowed, next: 0, acc: 0 };
+  return { zone, seed, rng: mulberry32(seed), pool: poolFor(zone), allowed, next: 0, acc: 0, goldDone: new Set() };
+}
+
+// True once per golden band: the band rolled gold and no golden fish has been spawned in it yet.
+function takeGold(sp, d, s) {
+  const band = Math.floor(d / GOLD.EVERY);
+  if (!canBeGolden(s) || sp.goldDone.has(band) || !goldBand(sp.seed, band)) return false;
+  sp.goldDone.add(band);
+  return true;
 }
 
 function pick(sp, d) {
@@ -48,8 +64,10 @@ function pick(sp, d) {
   return from[from.length - 1].sp;
 }
 
-export function makeFish(sp, x, d, dir = 1) {
-  return { sp, x, d, r: sp.r, hp: sp.hp, dir, t: 0, home: d };
+export function makeFish(sp, x, d, dir = 1, golden = false) {
+  const f = { sp, x, d, r: sp.r, hp: sp.hp, dir, t: 0, home: d };
+  if (golden) { f.golden = true; f.hp = sp.hp * GOLD.HP; }
+  return f;
 }
 
 // Spawns chunks until `upto` metres (exclusive) into run.fish.
@@ -66,7 +84,7 @@ export function spawnTo(run, sp, upto, limit = run.lineLength) {
       const n = s.beh === 'school' ? 3 + Math.floor(sp.rng() * 4) : 1;
       const x0 = 40 + sp.rng() * (W - 80);
       for (let i = 0; i < n; i++) {
-        const f = makeFish(s, Math.max(s.r, Math.min(W - s.r, x0 + i * 30 * dir)), d + (i % 2) * 2, dir);
+        const f = makeFish(s, Math.max(s.r, Math.min(W - s.r, x0 + i * 30 * dir)), d + (i % 2) * 2, dir, i === 0 && takeGold(sp, d, s));
         f.school = n > 1 ? d0 : 0;
         f.t = sp.rng() * 10;
         run.fish.push(f);
@@ -86,37 +104,41 @@ function wall(f) {
 
 // Moves fish near the lure (within ~1.5 screens) according to their behaviour.
 export function moveFish(run, dt) {
-  const lx = run.lure.x;
   for (const f of run.fish) {
     if (Math.abs(f.d - run.depth) > AHEAD) continue;
-    f.t += dt;
-    switch (f.sp.beh) {
-      case 'dart': f.x += f.dir * ((f.t % 1.3) < 1 ? 40 : 260) * dt; break;
-      case 'flee': {
-        const dx = f.x - lx, dy = (f.d - run.depth) * PX_PER_M;
-        if (Math.abs(dx) < 160 && Math.abs(dy) < 160) {
-          f.dir = dx >= 0 ? 1 : -1;
-          f.x += f.dir * 220 * dt;
-          if (f.x <= f.r || f.x >= W - f.r) f.x = Math.max(f.r, Math.min(W - f.r, f.x)); // cornered
-          continue;
-        }
-        f.x += f.dir * SPEED.drift * dt; break;
-      }
-      case 'chase': {
-        const dx = lx - f.x;
-        f.x += Math.sign(dx) * Math.min(60 * dt, Math.abs(dx));
-        continue;
-      }
-      case 'bob': f.d = f.home + Math.sin(f.t * 2) * 0.6; f.x += f.dir * SPEED.bob * dt; break;
-      case 'boss': f.x = W / 2 + Math.sin(f.t * 0.5) * 80; continue;
-      default: f.x += f.dir * (SPEED[f.sp.beh] || 45) * dt;
-    }
-    wall(f);
+    moveOne(run, f, f.golden ? dt * GOLD.SPEED : dt); // golden fish are a bit quicker
   }
 }
 
+function moveOne(run, f, dt) {
+  const lx = run.lure.x;
+  f.t += dt;
+  switch (f.sp.beh) {
+    case 'dart': f.x += f.dir * ((f.t % 1.3) < 1 ? 40 : 260) * dt; break;
+    case 'flee': {
+      const dx = f.x - lx, dy = (f.d - run.depth) * PX_PER_M;
+      if (Math.abs(dx) < 160 && Math.abs(dy) < 160) {
+        f.dir = dx >= 0 ? 1 : -1;
+        f.x += f.dir * 220 * dt;
+        if (f.x <= f.r || f.x >= W - f.r) f.x = Math.max(f.r, Math.min(W - f.r, f.x)); // cornered
+        return;
+      }
+      f.x += f.dir * SPEED.drift * dt; break;
+    }
+    case 'chase': {
+      const dx = lx - f.x;
+      f.x += Math.sign(dx) * Math.min(60 * dt, Math.abs(dx));
+      return;
+    }
+    case 'bob': f.d = f.home + Math.sin(f.t * 2) * 0.6; f.x += f.dir * SPEED.bob * dt; break;
+    case 'boss': f.x = W / 2 + Math.sin(f.t * 0.5) * 80; return;
+    default: f.x += f.dir * (SPEED[f.sp.beh] || 45) * dt;
+  }
+  wall(f);
+}
+
 // Spawn conditions (GAME_SPEC §4.4 + §9.6 Day/Night toggle).
-// ctx: { hour, night (toggle), hat, suit, post (final boss landed), touched (Set) }
+// ctx: { hour, night (toggle), hat, suit, post (final boss landed), bosses (zone ids whose boss was landed), touched (Set) }
 export function isDay(h) { return h >= 5 && h < 19; }            // 06-18, ±1 h dusk/dawn overlap
 export function isNight(h) { return h >= 17 || h < 7; }
 export function isMidnight(h) { return h >= 23 || h < 1; }
@@ -129,6 +151,7 @@ export function makeAllowed(ctx) {
     if (c === 'midnight') return ctx.night || isMidnight(ctx.hour);
     if (c === 'post') return !!ctx.post;
     if (c === 'pre') return !ctx.post;
+    if (/^(pre|post):\d+$/.test(c)) return (c[1] === 'o') === (ctx.bosses || []).includes(Number(c.split(':')[1]));
     if (c.startsWith('hat:')) return ctx.hat === c.slice(4);
     if (c.startsWith('suit:')) return ctx.suit === c.slice(5);
     if (c.startsWith('after:')) return touched.has(Number(c.slice(6)));

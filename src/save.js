@@ -7,8 +7,27 @@ export function freshSlot(i = 0) {
   return {
     name: PRESET_NAMES[i % PRESET_NAMES.length], color: PRESET_COLORS[i % PRESET_COLORS.length], cash: 0,
     owned: ['line0', 'pistol'], equip: { gun: 'pistol', hat: null, outfit: null, start: null, charm: null },
-    zonesUnlocked: [1], bestDepth: {}, dex: {}, flags: { bossBeaten: false, hasCast: false },
-    settings: { muted: false, musicMuted: false, night: false }, zone: 1,
+    zonesUnlocked: [1], bestDepth: {}, dex: {}, flags: { bossBeaten: false, bosses: [], hasCast: false },
+    settings: { muted: false, musicMuted: false, night: false }, zone: 1, seas: SEAS,
+  };
+}
+
+// v1.4 "Nine Seas" (same v2 key, additive): the Whirlpool moved from zone id 4 to 9 (zones 4-8 are new), and
+// flags.bossBeaten now means the FINAL boss (Dragon's Deep). A slot written before v1.4 (no `seas` mark) gets its
+// Whirlpool best depth / unlock / selection moved to id 9, and its old bossBeaten (= the Frozen Block was landed)
+// becomes flags.bosses [3]. Zones 1-3 are untouched; the Whirlpool stays open (unlocks are sticky).
+export const SEAS = 9;
+const OLD_WHIRLPOOL = 4, WHIRLPOOL_ID = 9;
+function slotToSeas(slot) {
+  if (slot.seas === SEAS) return slot;
+  const id = (z) => (z === OLD_WHIRLPOOL ? WHIRLPOOL_ID : z);
+  const bestDepth = {};
+  for (const [k, v] of Object.entries(slot.bestDepth || {})) bestDepth[id(Number(k))] = v;
+  const beat = !!slot.flags?.bossBeaten;
+  return {
+    ...slot, seas: SEAS, bestDepth, zone: id(slot.zone ?? 1),
+    zonesUnlocked: Array.isArray(slot.zonesUnlocked) ? slot.zonesUnlocked.map(id) : [1],
+    flags: { ...slot.flags, bossBeaten: false, bosses: beat ? [3] : [] },
   };
 }
 
@@ -24,8 +43,9 @@ function store() { try { return globalThis.localStorage || null; } catch { retur
 // Fills fields added since a slot was written, keeping anything unknown (forward-compatible).
 function normalizeSlot(slot, i) {
   if (!slot || typeof slot !== 'object') return null;
+  slot = slotToSeas(slot);
   const f = freshSlot(i);
-  return { ...f, ...slot, equip: { ...f.equip, ...slot.equip }, flags: { ...f.flags, ...slot.flags },
+  return { ...f, ...slot, equip: { ...f.equip, ...slot.equip }, flags: { ...f.flags, ...slot.flags, bosses: Array.isArray(slot.flags?.bosses) ? slot.flags.bosses : [] },
     settings: { ...f.settings, ...slot.settings }, dex: { ...slot.dex }, bestDepth: { ...slot.bestDepth },
     owned: Array.isArray(slot.owned) ? slot.owned : f.owned };
 }

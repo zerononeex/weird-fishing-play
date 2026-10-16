@@ -17,8 +17,16 @@ export const GUNS = [
 export const GUN = Object.fromEntries(GUNS.map((g) => [g.id, g]));
 
 // Everything for sale (GAME_SPEC §5). cat = shop tab; need(slot) = extra unlock rule (returns '' when met).
-const L = (tier, price, m) => ({ id: 'line' + tier, cat: 'lines', name: m === Infinity ? 'Forever Reel' : `${m} m Line`, price, req: tier > 1 ? ['line' + (tier - 1)] : [], line: m,
-  desc: m === Infinity ? 'Endless line for The Whirlpool' : `Fish down to ${m} m` });
+import { SPECIES } from './fish.js';
+import { FINAL_ZONE } from './zones.js';
+// Lines, shortest first. Ids are save data: line1-line6 are the v1.0 ids (line6 = Forever Reel), v1.4 inserts
+// line7-line11 (900-2000 m) between the 700 m Line and the Forever Reel, which stays the last and priciest. [TUNE]
+const L = (id, price, m, prev) => ({ id, cat: 'lines', name: m === Infinity ? 'Forever Reel' : `${m.toLocaleString('en-US')} m Line`, price, req: prev ? [prev] : [], line: m,
+  desc: m === Infinity ? 'Endless line for The Whirlpool' : `Fish down to ${m.toLocaleString('en-US')} m` });
+const LINE_ROWS = [['line1', 40, 100], ['line2', 250, 200], ['line3', 500, 300], ['line4', 2000, 500], ['line5', 7000, 700],
+  ['line7', 12000, 900], ['line8', 20000, 1100], ['line9', 32000, 1300], ['line10', 50000, 1600], ['line11', 80000, 2000],
+  ['line6', 120000, Infinity]];
+export const LINE_ITEMS = LINE_ROWS.map(([id, price, m], i) => L(id, price, m, LINE_ROWS[i - 1]?.[0]));
 // Wear abilities (GAME_SPEC §10.B): exactly one per hat/outfit. cashPct/launchPct/sawFuelPct are percent
 // numbers; fallSlow is a gravity multiplier during SHOOT.
 const A = (kind, value) => ({ kind, value });
@@ -29,10 +37,13 @@ export function abilityText({ kind, value }) {
   if (kind === 'sawFuelPct') return `+${value}% saw fuel`;
   return '';
 }
-const reached = (zone, m, label) => (slot) => ((slot.bestDepth[zone] || 0) >= m ? '' : `Reach ${m} m in ${label}`);
+const reached = (zone, m, label) => (slot) => ((slot.bestDepth[zone] || 0) >= m ? '' : `Reach ${m.toLocaleString('en-US')} m in ${label}`);
+const finalBeaten = (s) => !!s.flags.bossBeaten;
+// Start-depth items (GAME_SPEC §5, v1.4 §13): start = [zone, depth]; buyable after reaching that depth once in the zone.
+const S = (id, name, price, zone, m, label) => ({ id, cat: 'lures', name, price, req: [], start: [zone, m], need: reached(zone, m, label), desc: `Start ${label} at ${m.toLocaleString('en-US')} m` });
 
 export const ITEMS = [
-  L(1, 40, 100), L(2, 250, 200), L(3, 500, 300), L(4, 2000, 500), L(5, 7000, 700), L(6, 20000, Infinity),
+  ...LINE_ITEMS,
   ...GUNS.filter((g) => g.price > 0).map((g) => ({ id: g.id, cat: 'guns', name: g.name, price: g.price, req: g.req,
     desc: `${+(g.rate * CONFIG.GUN_RATE_MULT).toFixed(1)}/s · ${g.damage} dmg${g.pellets > 1 ? ` · ${g.pellets} pellets` : ''}` })),
   { id: 'chainsaw', cat: 'lures', name: 'Chainsaw Lure', price: 120, req: [], desc: 'Hold to saw through fish' },
@@ -47,9 +58,14 @@ export const ITEMS = [
   { id: 'antigrav', cat: 'lures', name: 'Antigravity', price: 65000, req: ['spring'], desc: 'Fish fall slower' },
   { id: 'knife', cat: 'lures', name: 'Knife', price: 100, req: [], desc: 'Cut the line and start over' },
   { id: 'dex', cat: 'lures', name: 'Fish-o-pedia', price: 30, req: [], desc: 'Your fish collection book' },
-  { id: 'boot', cat: 'lures', name: 'Old Boot', price: 1000, req: [], start: [1, 100], need: reached(1, 100, 'Puddle Bay'), desc: 'Start Puddle Bay at 100 m' },
-  { id: 'ball', cat: 'lures', name: 'Bowling Ball', price: 5500, req: [], start: [2, 200], need: reached(2, 200, 'Grumble Sea'), desc: 'Start Grumble Sea at 200 m' },
-  { id: 'drum', cat: 'lures', name: 'Oil Drum', price: 140000, req: [], start: [3, 300], need: reached(3, 300, 'Iceberg Alley'), desc: 'Start Iceberg Alley at 300 m' },
+  S('boot', 'Old Boot', 1000, 1, 100, 'Puddle Bay'),
+  S('ball', 'Bowling Ball', 5500, 2, 200, 'Grumble Sea'),
+  S('drum', 'Oil Drum', 140000, 3, 300, 'Iceberg Alley'),
+  S('anvil', 'Anvil', 180000, 4, 700, 'Jellyfish Jungle'),
+  S('chest', 'Treasure Chest', 240000, 5, 900, 'Sunken City'),
+  S('leadboots', 'Lead Boots', 320000, 6, 1100, 'Volcano Deep'),
+  S('piano', 'Grand Piano', 420000, 7, 1400, 'Moonlight Trench'),
+  S('anchor', "Ship's Anchor", 550000, 8, 1800, "Dragon's Deep"),
   // Hook Charms (GAME_SPEC §10.E): equip one. charges = zaps per dive (refill every cast); all = each zap hits
   // every visible fish; bonus = pay × for zapped fish; magnet = ascent pull radius (px). [TUNE]
   { id: 'charm_toaster', cat: 'charms', name: 'Toaster Charm', price: 900, req: [], charm: { charges: 2 }, desc: 'Zaps 2 fish you bump' },
@@ -60,13 +76,13 @@ export const ITEMS = [
   { id: 'vest', cat: 'wear', name: 'Fancy Vest', price: 1200, req: [], outfit: true, ability: A('cashPct', 10), desc: 'Smart and shiny' },
   { id: 'robe', cat: 'wear', name: 'Star Robe', price: 6000, req: [], outfit: true, ability: A('cashPct', 20), desc: 'Twinkly wizard wear' },
   { id: 'pajamas', cat: 'wear', name: "King's Pajamas", price: 30000, req: [], outfit: true, ability: A('cashPct', 50), desc: 'Fit for a fish king' },
-  { id: 'fancap', cat: 'wear', name: 'Fan Cap', price: 100, req: [], hat: true, ability: A('cashPct', 5), need: (s) => (Object.keys(s.dex).length >= 66 ? '' : 'Find all 66 fish'), desc: 'For true fish fans' },
+  { id: 'fancap', cat: 'wear', name: 'Fan Cap', price: 100, req: [], hat: true, ability: A('cashPct', 5), need: (s) => (Object.keys(s.dex).length >= SPECIES.length ? '' : `Find all ${SPECIES.length} fish`), desc: 'For true fish fans' },
   { id: 'captain', cat: 'wear', name: 'Captain Hat', price: 10000, req: [], hat: true, ability: A('fallSlow', 0.9), desc: 'Very official' },
   { id: 'safari', cat: 'wear', name: 'Safari Hat', price: 10000, req: [], hat: true, ability: A('launchPct', 15), desc: 'Ready for adventure' },
   { id: 'paperhat', cat: 'wear', name: 'Paper Boat Hat', price: 80000, req: [], hat: true, ability: A('fallSlow', 0.8), desc: 'Folded with love' },
   { id: 'pirate', cat: 'wear', name: 'Pirate Hat', price: 80000, req: [], hat: true, ability: A('cashPct', 25), desc: 'Arr!' },
-  { id: 'frost', cat: 'wear', name: 'Frost Beanie', price: 0, req: [], hat: true, gift: true, ability: A('fallSlow', 0.9), need: (s) => (s.flags.bossBeaten ? '' : 'A gift for beating the final boss'), desc: 'Cosy! Some fish love it' },
-  { id: 'suncrown', cat: 'wear', name: 'Sun Crown', price: 20000, req: [], hat: true, ability: A('cashPct', 15), need: (s) => (s.flags.bossBeaten ? '' : 'Beat the final boss'), desc: 'Peeper Fish are curious…' },
+  { id: 'frost', cat: 'wear', name: 'Frost Beanie', price: 0, req: [], hat: true, gift: true, ability: A('fallSlow', 0.9), need: (s) => (finalBeaten(s) ? '' : `A gift for beating the boss of ${FINAL_ZONE.name}`), desc: 'Cosy! Some fish love it' },
+  { id: 'suncrown', cat: 'wear', name: 'Sun Crown', price: 20000, req: [], hat: true, ability: A('cashPct', 15), need: (s) => (finalBeaten(s) ? '' : `Beat the boss of ${FINAL_ZONE.name}`), desc: 'Peeper Fish are curious…' },
 ];
 export const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
 export const TABS = [['lines', 'Lines'], ['guns', 'Guns'], ['lures', 'Lures'], ['charms', 'Charms'], ['wear', 'Wear']];

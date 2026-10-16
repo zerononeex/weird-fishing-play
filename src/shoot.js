@@ -1,6 +1,7 @@
 // Surface launch + shooting (GAME_SPEC §3, §5). Pure: no DOM.
 // Firing is limited ONLY by each gun's fire rate. There is no limited-shots state of any kind.
 import { CONFIG } from './config.js';
+import { GOLD } from './fish.js';
 
 const { W, H } = CONFIG;
 // VY_MIN/VY_MAX are the v1.0 base speeds; CONFIG.LAUNCH_VY_MULT scales them. Gravity is CONFIG.GRAVITY.
@@ -51,7 +52,9 @@ export function moveCam(s, dt) {
 
 export function launchOne(s, f, rng = Math.random) {
   const vy = -(SHOOT.VY_MIN + rng() * (SHOOT.VY_MAX - SHOOT.VY_MIN)) * s.vyMul;
-  s.air.push({ sp: f.sp, d: f.d, r: f.r, hp: f.hp, x: s.x0, y: SHOOT.WATER, vx: (rng() * 2 - 1) * SHOOT.VX, vy, spin: 0, hit: 0 });
+  const g = { sp: f.sp, d: f.d, r: f.r, hp: f.hp, x: s.x0, y: SHOOT.WATER, vx: (rng() * 2 - 1) * SHOOT.VX, vy, spin: 0, hit: 0 };
+  if (f.golden) { g.golden = true; g.vx *= GOLD.SPEED; g.wob = rng() * 6; } // golden: 3x HP (makeFish), quicker + a wobble
+  s.air.push(g);
 }
 
 // Moves airborne fish; fish falling back below the waterline are lost (not paid).
@@ -61,6 +64,7 @@ export function flyFish(s, dt, rng = Math.random) {
   while (s.queue.length && s.launchIn <= 1e-9) { launchOne(s, s.queue.shift(), rng); s.launchIn += SHOOT.STAGGER; }
   for (const f of [...s.air]) {
     f.vy += s.g * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.spin += dt * f.vx * 0.02;
+    if (f.golden) { f.wob += dt * 7; f.x += Math.cos(f.wob) * GOLD.WOBBLE * 7 * dt; } // side-to-side ±GOLD.WOBBLE px
     f.hit = Math.max(0, f.hit - dt);
     if (f.x < f.r) { f.x = f.r; f.vx = Math.abs(f.vx); }
     if (f.x > W - f.r) { f.x = W - f.r; f.vx = -Math.abs(f.vx); }

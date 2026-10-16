@@ -6,7 +6,6 @@ export const PHYS = {
   SINK: 14, REEL: 20,            // m/s [TUNE]
   LURE_Y_DESCENT: 0.3, LURE_Y_ASCENT: 0.7, // lure screen position (fraction of H)
 };
-export const LINES = [50, 100, 200, 300, 500, 700, Infinity];
 
 export function createLure() { return { x: CONFIG.W / 2, vx: 0 }; }
 
@@ -94,8 +93,9 @@ export function land(run, f, how) {
   run.fish.splice(run.fish.indexOf(f), 1);
   const rec = { sp: f.sp, depth: f.d, how };
   if (how === 'zap' && run.zapBonus > 1) rec.bonus = run.zapBonus;
+  if (f.golden) rec.golden = true;
   run.landed.push(rec);
-  run.fx.push({ type: how, x: f.x, d: f.d, sp: f.sp, bonus: rec.bonus });
+  run.fx.push({ type: how, x: f.x, d: f.d, sp: f.sp, bonus: rec.bonus, golden: rec.golden });
 }
 
 export const MAGNET = { SPEED: 140 }; // px/s [TUNE]
@@ -116,7 +116,7 @@ export function magnetStep(run, dt) {
 function hook(run, f) {
   run.fish.splice(run.fish.indexOf(f), 1);
   run.hooked.push(f);
-  run.fx.push({ type: 'hook', x: f.x, d: f.d, sp: f.sp });
+  run.fx.push({ type: 'hook', x: f.x, d: f.d, sp: f.sp, golden: f.golden });
 }
 
 // Resolves lure/fish contact for this frame. Returns 'touch' when the descent must end.

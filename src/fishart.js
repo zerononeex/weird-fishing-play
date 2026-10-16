@@ -257,6 +257,7 @@ function star(c, x, y, r, fill) {
 export const fishArtPath = (sp) => `fish/fish_${String(sp.id).padStart(2, '0')}.png`;
 export function drawFish(ctx, sp, x, y, r, dir, t, opts = {}) {
   if (opts.silhouette) return drawSilhouette(ctx, sp, x, y, r, dir);
+  if (opts.golden) return drawGolden(ctx, sp, x, y, r, dir, t);
   const im = art(fishArtPath(sp));
   if (im) { // sprite art faces right; its longest side spans ~2.8 r, with a little wobble
     const k = (r * 2.8) / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
@@ -273,8 +274,9 @@ export function drawFish(ctx, sp, x, y, r, dir, t, opts = {}) {
 
 // The species' sprite art fitted to a size×size box (its longest side = size), upright and facing right,
 // for menus (payout rows, the payout hero). Falls back to the code-drawn fish. Returns true for art.
-export function drawFishSprite(ctx, sp, x, y, size, t = 0) {
+export function drawFishSprite(ctx, sp, x, y, size, t = 0, golden = false) {
   const im = art(fishArtPath(sp));
+  if (golden) { drawGolden(ctx, sp, x, y, size / 2.8, 1, t); return !!im; }
   if (!im) { drawFish(ctx, sp, x, y, size / 2.8, 1, t); return false; }
   const k = size / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
   ctx.drawImage(im, x - w / 2, y - h / 2, w, h);
@@ -297,6 +299,56 @@ function drawSilhouette(ctx, sp, x, y, r, dir) {
   const size = c.width / 2;
   ctx.save(); ctx.globalAlpha *= 0.5; ctx.translate(x, y); if (dir < 0) ctx.scale(-1, 1);
   ctx.drawImage(c, -size / 2, -size / 2, size, size);
+  ctx.restore();
+}
+
+// ---- golden fish (v1.4): the species' own art (sprite or code shape) with a gold treatment + a sparkle trail ----
+export const GOLD_INK = '#ffd23f';
+const goldCache = new Map();
+function goldSprite(sp, r) {
+  const key = sp.id + ':' + r + (art(fishArtPath(sp)) ? 'a' : 'c'); // re-cache once the sprite has loaded
+  let c = goldCache.get(key);
+  if (!c) {
+    const size = Math.ceil(r * 3.2);
+    c = document.createElement('canvas'); c.width = c.height = size * 2;
+    const g = c.getContext('2d');
+    g.scale(2, 2);
+    drawFish(g, sp, size / 2, size / 2, r, 1, 0);
+    g.globalCompositeOperation = 'color';             // gold hue + saturation, the fish's own light and shade
+    g.fillStyle = '#ffb800'; g.fillRect(0, 0, size, size);
+    g.globalCompositeOperation = 'screen';            // a warm sheen, brightest on top
+    const sh = g.createLinearGradient(0, size * 0.2, 0, size * 0.8);
+    sh.addColorStop(0, 'rgba(255,236,150,0.6)'); sh.addColorStop(0.5, 'rgba(255,200,60,0.25)'); sh.addColorStop(1, 'rgba(120,70,0,0)');
+    g.fillStyle = sh; g.fillRect(0, 0, size, size);
+    g.globalCompositeOperation = 'destination-in';    // ...but only where the fish is
+    drawFish(g, sp, size / 2, size / 2, r, 1, 0);
+    goldCache.set(key, c);
+  }
+  return c;
+}
+
+function sparkle(ctx, x, y, s, a) {
+  ctx.globalAlpha = a; ctx.fillStyle = '#fff6c2'; ctx.beginPath();
+  ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.28, y - s * 0.28); ctx.lineTo(x + s, y); ctx.lineTo(x + s * 0.28, y + s * 0.28);
+  ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.28, y + s * 0.28); ctx.lineTo(x - s, y); ctx.lineTo(x - s * 0.28, y - s * 0.28); ctx.fill();
+}
+
+export function drawGolden(ctx, sp, x, y, r, dir, t) {
+  const c = goldSprite(sp, r), size = c.width / 2;
+  ctx.save();
+  // sparkle trail behind the fish (it swims toward `dir`)
+  for (let i = 0; i < 6; i++) {
+    const k = (t * 1.6 + i / 6) % 1, sx = x - dir * (r * 0.8 + k * r * 2.2), sy = y + Math.sin(t * 5 + i * 2.1) * r * 0.45;
+    sparkle(ctx, sx, sy, (3 + (i % 3) * 2) * (1 - k * 0.6) * Math.max(0.6, r / 24), (1 - k) * 0.9);
+  }
+  ctx.globalAlpha = 0.35 + Math.sin(t * 4) * 0.1;
+  const glow = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 1.6);
+  glow.addColorStop(0, 'rgba(255,215,80,0.9)'); glow.addColorStop(1, 'rgba(255,215,80,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.translate(x, y); ctx.scale(dir < 0 ? -1 : 1, 1); ctx.rotate(Math.sin(t * 6 + sp.id) * 0.05);
+  ctx.drawImage(c, -size / 2, -size / 2, size, size);
+  sparkle(ctx, r * 0.3, -r * 0.5, 4 + 3 * Math.abs(Math.sin(t * 3)), 0.95); // a twinkle on the body
   ctx.restore();
 }
 

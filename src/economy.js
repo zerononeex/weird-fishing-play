@@ -1,19 +1,21 @@
 // Money, purchases, unlocks and the Fish-o-pedia (GAME_SPEC §5). Pure: no DOM.
-import { ZONES } from './data/zones.js';
+import { ZONES, WHIRLPOOL, FINAL_ZONE } from './data/zones.js';
 import { CONFIG } from './config.js';
-import { ITEM, GUN } from './data/shop.js';
-import { LINES } from './sim.js';
+import { ITEM, GUN, LINE_ITEMS } from './data/shop.js';
+import { GOLD } from './fish.js';
 
 export const dexCount = (slot) => Object.keys(slot.dex).length;
 
+// v1.4: an opened zone stays open (old saves keep the Whirlpool they had, whatever the new gates say).
 export function zoneUnlocked(slot, zone) {
+  if (slot.zonesUnlocked?.includes(zone.id)) return true;
   if (zone.needsBoss) return !!slot.flags.bossBeaten;
   return dexCount(slot) >= zone.unlockSpecies;
 }
 
 export function lockReason(slot, zone) {
   if (zoneUnlocked(slot, zone)) return '';
-  if (zone.needsBoss) return 'Beat the boss of Iceberg Alley';
+  if (zone.needsBoss) return `Beat the boss of ${FINAL_ZONE.name}`;
   return `Find ${zone.unlockSpecies - dexCount(slot)} more kinds of fish`;
 }
 
@@ -26,7 +28,7 @@ export function refreshUnlocks(slot) {
 
 // ---- payout (GAME_SPEC §5.1) ----
 
-export const whirlpoolFactor = (zoneId, depth) => (zoneId === 4 ? 1 + Math.floor(depth / 250) * 0.25 : 1);
+export const whirlpoolFactor = (zoneId, depth) => (zoneId === WHIRLPOOL.id ? 1 + Math.floor(depth / 250) * 0.25 : 1);
 
 // Combined wear abilities of the hat + outfit slots (GAME_SPEC §10.B). Cash %s add; multipliers multiply.
 export function wearAbilities(equip = {}) {
@@ -42,11 +44,12 @@ export function wearAbilities(equip = {}) {
   return out;
 }
 
-// ctx: { outfit, hat, zoneId }. fish: { sp, d|depth, bonus? } — bonus is the Lucky Charm's ×2 on zapped fish.
+// ctx: { outfit, hat, zoneId }. fish: { sp, d|depth, bonus?, golden? } — bonus is the Lucky Charm's ×2 on zapped
+// fish; a golden fish (v1.4) pays GOLD.PAY × wherever it is paid (shot, sawn or zapped).
 export function fishPay(fish, ctx = {}) {
   const depth = fish.depth ?? fish.d ?? 0;
   const cash = wearAbilities(ctx).cash;
-  return fish.sp.value * CONFIG.CASH_MULTIPLIER * (1 + cash) * whirlpoolFactor(ctx.zoneId, depth) * (fish.bonus || 1);
+  return fish.sp.value * CONFIG.CASH_MULTIPLIER * (1 + cash) * whirlpoolFactor(ctx.zoneId, depth) * (fish.bonus || 1) * (fish.golden ? GOLD.PAY : 1);
 }
 
 // Jellies subtract, but a run never pays less than $0.
@@ -96,9 +99,12 @@ export function grantGifts(slot) {
   for (const it of Object.values(ITEM)) if (it.gift && !it.need(slot) && !owns(slot, it.id)) slot.owned.push(it.id);
 }
 
+// The line ladder in metres: the free 50 m line, then every line for sale (shortest first, Forever Reel last).
+export const LINES = [50, ...LINE_ITEMS.map((l) => l.line)];
+// Index into LINES of the longest line owned (0 = the free 50 m line).
 export function lineTier(slot) {
   let t = 0;
-  for (let i = 1; i < LINES.length; i++) if (owns(slot, 'line' + i)) t = i;
+  LINE_ITEMS.forEach((l, i) => { if (owns(slot, l.id)) t = i + 1; });
   return t;
 }
 
@@ -123,13 +129,16 @@ export function gearOf(slot, zoneId) {
 }
 
 // ---- Fish-o-pedia (GAME_SPEC §4.5): a species is discovered the first time it is landed ----
+// Dex entry: { n: caught, best: deepest m, g: golden catches (v1.4, additive: missing = 0) }.
 export function discover(slot, landed) {
   const fresh = [];
   for (const f of landed) {
     const depth = Math.floor(f.depth ?? f.d ?? 0);
-    const e = slot.dex[f.sp.id];
-    if (!e) { slot.dex[f.sp.id] = { n: 1, best: depth }; fresh.push(f.sp); }
-    else { e.n++; e.best = Math.max(e.best, depth); }
+    let e = slot.dex[f.sp.id];
+    if (!e) { e = slot.dex[f.sp.id] = { n: 0, best: depth }; fresh.push(f.sp); }
+    e.n++; e.best = Math.max(e.best, depth);
+    if (f.golden) e.g = (e.g || 0) + 1;
   }
   return fresh;
 }
+export const goldenCount = (slot, id) => slot.dex[id]?.g || 0;

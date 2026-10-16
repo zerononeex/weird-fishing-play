@@ -121,7 +121,7 @@ export function drawSawButton(ctx, input, t) {
 export function drawBoat(ctx, x, y, t, color = '#ff6b9a', wear = null, buddy = null, pose = 'idle') {
   ctx.save(); ctx.translate(x, y + Math.sin(t * 2) * 3); ctx.rotate(Math.sin(t * 1.3) * 0.03);
   const boatImg = art('dock/boat.png'), fisherImg = art(pose === 'cast' ? 'dock/fisher_cast.png' : 'dock/fisher_idle.png');
-  if (fisherImg) { ctx.drawImage(fisherImg, ...ANCHOR.ART.box); wear?.(ctx, ANCHOR.ART); }
+  if (fisherImg) { ctx.drawImage(fisherImg, ...ANCHOR.ART.box); wear?.(ctx, ANCHOR.ART, pose); }
   else {
     ctx.fillStyle = color; rr(ctx, -16, -62, 32, 40, 10); ctx.fill();
     ctx.fillStyle = '#ffd7b5'; ctx.beginPath(); ctx.arc(0, -76, 16, 0, Math.PI * 2); ctx.fill();

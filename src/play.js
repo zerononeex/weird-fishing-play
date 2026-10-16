@@ -23,7 +23,8 @@ import { KNIFE_BTN } from './ui.js';
 const { W, H, PX_PER_M } = CONFIG;
 const CAST_S = 0.8, TURN_S = 0.5;
 // v1.2: the cast moment sits 64 px lower (surface line lower on screen), then eases up to the dive position.
-export const CAST_DROP = 64;
+// v1.4: the dock boat moved down another 146 px (WATER 394 -> 540), so the cast surface drops by the same amount.
+export const CAST_DROP = 64 + 146;
 // cast_top (art #146): the sea surface sits at this fraction of the image height (wave band 0.375–0.57).
 export const CAST_TOP = { SURFACE: 0.44, FADE: 240, NIGHT: 'rgba(5,15,45,0.5)' };
 export const castTopDrawn = { at: -1 }; // smoke: screen y of the image top on the last frame it was drawn (-1: not drawn)
@@ -33,7 +34,7 @@ let spawner = null;
 
 let allowed = () => true;
 
-// opts: { zone, lineLength, startDepth, gear, cond: { hour, night, hat, suit, post }, seed }
+// opts: { zone, lineLength, startDepth, gear, cond: { hour, night, hat, suit, post, bosses }, seed }
 export function startRun(opts) {
   const zone = opts.zone || ZONES[0];
   G.run = createRun({ lineLength: Math.min(opts.lineLength, zone.maxDepth), startDepth: opts.startDepth || 0 });
@@ -144,12 +145,15 @@ function charmPips(ctx, run) {
 const fishY = (run, f) => screenY(run, f.d, lureY);
 function drawSchool(ctx, run, t, glow) {
   for (const f of run.fish) {
-    if ((f.sp.beh === 'glow') !== glow) continue;
+    if ((f.sp.beh === 'glow' || !!f.golden) !== glow) continue; // glowing + golden fish shine through the dark
     const y = fishY(run, f);
     if (y < -100 || y > H + 100) continue;
-    drawFish(ctx, f.sp, f.x, y, f.r, f.dir, t + f.t);
+    drawFish(ctx, f.sp, f.x, y, f.r, f.dir, t + f.t, f.golden ? GOLDEN : undefined);
   }
 }
+const GOLDEN = { golden: true };
+// The penguin buddy rides along once the Frozen Block has been melted (the ice comic, GAME_SPEC §6).
+export const hasBuddy = (slot) => !!slot.flags.bosses?.includes(3);
 
 // Above-water art (v1.2): sky + wave surface + shallow water as the top segment over the zone sea.
 // It scrolls 1:1 with the surface, and its lower FADE px blend into the zone background.
@@ -160,6 +164,8 @@ function castTop(ctx, surfY, night) {
   const h = (W * im.naturalHeight) / im.naturalWidth, top = surfY - h * CAST_TOP.SURFACE, bottom = top + h;
   if (bottom <= 0) return true;
   ctx.drawImage(fadedArt('bg/cast_top.png', CAST_TOP.FADE / h), 0, top, W, h);
+  // v1.4: with the lower cast surface the image top can sit below y 0; stretch its top sky row over the gap
+  if (top > 0) ctx.drawImage(im, 0, 0, im.naturalWidth, 2, 0, 0, W, top + 1);
   if (night) { // same darkening as the other backgrounds at night, fading out with the image
     const g = ctx.createLinearGradient(0, bottom - CAST_TOP.FADE, 0, bottom);
     g.addColorStop(0, CAST_TOP.NIGHT); g.addColorStop(1, 'rgba(5,15,45,0)');
@@ -186,7 +192,7 @@ export function renderWorld(ctx, t) {
   drawLine(ctx, W / 2, Math.min(surfY, -10), run.lure.x, lureY - 26);
   run.hooked.forEach((f, i) => {
     const a = Math.sin(t * 5 + i) * 0.5;
-    drawFish(ctx, f.sp, run.lure.x + Math.sin(t * 4 + i * 2) * 14, lureY + 26 + (i % 12) * 9, Math.min(f.r, 26) * 0.8, a > 0 ? 1 : -1, t);
+    drawFish(ctx, f.sp, run.lure.x + Math.sin(t * 4 + i * 2) * 14, lureY + 26 + (i % 12) * 9, Math.min(f.r, 26) * 0.8, a > 0 ? 1 : -1, t, f.golden ? GOLDEN : undefined);
   });
   drawLure(ctx, run.lure.x, lureY, t, run.sawing);
   darkness(ctx, run);
@@ -210,10 +216,10 @@ const play = {
     sawLoop(G.run.sawing);
     for (const e of G.run.fx.splice(0)) {
       const y = screenY(G.run, e.d, lureY);
-      if (e.type === 'hook') { sfx.hook(); burst(e.x, y, '#bde0fe', 6, 120); if (e.sp.rarity === 'boss') sfx.boss(); }
+      if (e.type === 'hook') { sfx.hook(); burst(e.x, y, e.golden ? '#ffd23f' : '#bde0fe', e.golden ? 14 : 6, 120); if (e.golden) sfx.sparkle(); if (e.sp.rarity === 'boss') sfx.boss(); }
       if (e.type === 'zap' || e.type === 'saw') {
-        const pay = Math.round(fishPay({ sp: e.sp, d: e.d, bonus: e.bonus }, payCtx()));
-        popup(e.x, y - 24, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}`, pay < 0 ? '#ff8fa3' : '#ffe066');
+        const pay = Math.round(fishPay({ sp: e.sp, d: e.d, bonus: e.bonus, golden: e.golden }, payCtx()));
+        popup(e.x, y - 24, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}${e.golden ? ' GOLD!' : ''}`, pay < 0 ? '#ff8fa3' : '#ffe066');
       }
       if (e.type === 'zap') { sfx.zap(); strike(e.x, y); burst(e.x, y, '#ffee32', 14, 260); quake(5); }
       if (e.type === 'saw') { sfx.sawCut(); burst(e.x, y, '#ff8fa3', 10, 220); }
@@ -277,7 +283,8 @@ G.scenes.shoot = {
       if (pay < 0) sfx.ouch(); else sfx.coin();
       if (f.sp.rarity === 'boss') { sfx.boss(); quake(12, 0.5); }
       const { x, y } = toScreen(s, f.x, f.y);
-      burst(x, y, f.sp.color, 14, 240); popup(x, y - 20, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}`, pay < 0 ? '#ff8fa3' : '#ffe066');
+      burst(x, y, f.golden ? '#ffd23f' : f.sp.color, f.golden ? 28 : 14, 240);
+      popup(x, y - 20, `${pay < 0 ? '-' : '+'}$${Math.abs(pay).toLocaleString()}${f.golden ? ' ×5!' : ''}`, pay < 0 ? '#ff8fa3' : '#ffe066');
     }
     if (done) G.go('noAirborne');
   },
@@ -290,12 +297,12 @@ G.scenes.shoot = {
     ctx.save(); ctx.translate(W / 2, 0); ctx.scale(z, z); ctx.translate(-W / 2, -cam); // sky camera: pan + zoom
     if ((SHOOT.WATER + 4 - cam) * z < H + 140) {
       drawBoat(ctx, s.x0, SHOOT.WATER + 4, t, G.slot.color, wearDrawer(G.slot.equip),
-        G.slot.flags.bossBeaten ? (c) => drawFish(c, BY_ID.get(47), -44, -40, 16, -1, t) : null);
+        hasBuddy(G.slot) ? (c) => drawFish(c, BY_ID.get(47), -44, -40, 16, -1, t) : null);
     }
     for (const f of s.air) {
       ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.spin);
       if (f.hit > 0) ctx.globalAlpha = 0.6 + Math.sin(f.hit * 80) * 0.4;
-      drawFish(ctx, f.sp, 0, 0, f.r, 1, t);
+      drawFish(ctx, f.sp, 0, 0, f.r, 1, t, f.golden ? GOLDEN : undefined);
       ctx.restore();
     }
     for (const p of s.shots) {

@@ -1,5 +1,5 @@
 // Code-drawn shop icons and wearables. All original vector shapes; art slots override when present.
-import { drawArt } from './art.js';
+import { art, drawArt } from './art.js';
 const TAU = Math.PI * 2;
 
 function circ(c, x, y, r, f) { c.fillStyle = f; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
@@ -32,16 +32,125 @@ function star(c, x, y, r, f) {
   c.closePath(); c.fill();
 }
 
-// Where hats/outfits sit on the fisher. CODE = the code-drawn fisher; ART = the Act 2 sprite (tuned on import).
+// Where hats/outfits sit on the fisher. CODE = the code-drawn fisher; ART = the fisher sprite art.
 export const ANCHOR = {
   CODE: { head: [0, -78], hatScale: 1, body: [0, 0], bodyScale: 1 },
   // box/boat: where the 480×320 fisher sprite and the 400×200 hull sprite are drawn (logical px, boat origin)
-  ART: { box: [-120, -170, 240, 160], boat: [-100, -62, 200, 100], head: [-14, -82], hatScale: 2, body: [-4, 31], bodyScale: 1.3 },
+  ART: { box: [-120, -170, 240, 160], boat: [-100, -62, 200, 100] },
 };
 
-// Draws hat + outfit for drawBoat's wear callback.
+// ---- worn wearables on the fisher ART (v1.4): drawn from each item's shop-icon art, fitted to the sprite ----
+// Measured from assets/art-web/dock/fisher_idle|fisher_cast.webp, in sprite px (480×320; drawn at half size into
+// ANCHOR.ART.box). HEAD: x = centre of the hair mass, y = the brim line (just above the hairline, between the hair
+// top and the eyebrows), w = hair width there, rot = head tilt (cast leans forward). TORSO: the T-shirt box; y0 is
+// the neckline (shirt pixels above it are cheeks / mouth). The two poses differ: cast sits ~36 px lower + right.
+export const HEAD = { idle: { x: 204, y: 86, w: 172, rot: -0.04 }, cast: { x: 264, y: 124, w: 166, rot: 0.1 } };
+export const TORSO = { idle: { x0: 160, y0: 186, x1: 312, y1: 320 }, cast: { x0: 184, y0: 200, x1: 356, y1: 320 } };
+// Per-hat fit (tuned by eye on the smoke's dock shots, GAME_SPEC §13): s = hat width ÷ head width, dx/dy = offset of
+// the hat's bottom-centre from the brim point in head widths (+dy = lower), r = extra tilt (rad).
+export const HAT_FIT = {
+  fancap: { s: 0.98, dx: 0.08, dy: 0.04, r: 0 },
+  captain: { s: 0.92, dx: 0.02, dy: 0.06, r: 0 },
+  safari: { s: 1.12, dx: 0.02, dy: 0.08, r: 0 },
+  paperhat: { s: 1.02, dx: 0.02, dy: 0.06, r: 0 },
+  pirate: { s: 1.18, dx: 0.02, dy: 0.08, r: 0 },
+  frost: { s: 0.9, dx: 0.02, dy: 0.13, r: 0 },
+  suncrown: { s: 0.8, dx: 0.02, dy: 0.08, r: 0 },
+};
+// Per-outfit fit: the icon art covers the TORSO box (scaled by s, shifted by dx/dy in torso widths/heights) and is
+// clipped to the shirt pixels, so arms, hands, rod and head stay his. Torso only.
+export const OUTFIT_FIT = { vest: { s: 1.06, dx: 0, dy: 0.02 }, robe: { s: 1.1, dx: 0, dy: 0.04 }, pajamas: { s: 1.35, dx: -0.05, dy: 0.32 } };
+const SPRITE_W = 480;
+const fisherPath = (pose) => (pose === 'cast' ? 'dock/fisher_cast.png' : 'dock/fisher_idle.png');
+
+// Bounding box of an image's visible pixels (cached; the icons are padded 128×128 squares).
+const boxes = new Map();
+export function alphaBox(path, im) {
+  let b = boxes.get(path);
+  if (b) return b;
+  const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height).data;
+  let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4 + 3] > 40) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  b = x1 < 0 ? { x: 0, y: 0, w: c.width, h: c.height } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  boxes.set(path, b);
+  return b;
+}
+
+// Where a hat's art lands, in sprite px: { cx, cy (bottom-centre), w, h, rot, box }. Exported for the smoke test.
+export function hatPlacement(id, pose, box) {
+  const h = HEAD[pose] || HEAD.idle, f = HAT_FIT[id] || { s: 1, dx: 0, dy: 0, r: 0 }, w = h.w * f.s;
+  return { cx: h.x + f.dx * h.w, cy: h.y + f.dy * h.w, w, h: (box.h * w) / box.w, rot: h.rot + f.r };
+}
+
+function drawHatArt(c, id, pose) {
+  const path = `icons/icon_${id}.png`, im = art(path);
+  if (!im) return false;
+  const box = alphaBox(path, im), p = hatPlacement(id, pose, box);
+  c.save(); c.translate(p.cx, p.cy); c.rotate(p.rot);
+  c.drawImage(im, box.x, box.y, box.w, box.h, -p.w / 2, -p.h, p.w, p.h);
+  c.restore();
+  return true;
+}
+
+// The shirt pixels of a pose (coral-red T-shirt below the neckline), as an alpha mask. Cached per pose.
+const masks = new Map();
+export const isShirt = (r, g, b) => r > 110 && r - g > 50 && b >= g - 10;
+function shirtMask(pose) {
+  const im = art(fisherPath(pose));
+  if (!im) return null;
+  let m = masks.get(pose);
+  if (m) return m;
+  const T = TORSO[pose] || TORSO.idle;
+  m = document.createElement('canvas'); m.width = im.naturalWidth; m.height = im.naturalHeight;
+  const g = m.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
+  const id = g.getImageData(0, 0, m.width, m.height), d = id.data;
+  for (let y = 0; y < m.height; y++) for (let x = 0; x < m.width; x++) {
+    const i = (y * m.width + x) * 4, on = y >= T.y0 && x >= T.x0 && x <= T.x1 && d[i + 3] > 100 && isShirt(d[i], d[i + 1], d[i + 2]);
+    d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = on ? 255 : 0;
+  }
+  g.putImageData(id, 0, 0);
+  masks.set(pose, m);
+  return m;
+}
+
+// The outfit's icon art, fitted over the torso and clipped to the shirt. Cached per pose + outfit.
+const layers = new Map();
+function outfitLayer(id, pose) {
+  const path = `icons/icon_${id}.png`, im = art(path), mask = shirtMask(pose);
+  if (!im || !mask) return null;
+  const key = pose + ':' + id;
+  let c = layers.get(key);
+  if (c) return c;
+  const T = TORSO[pose] || TORSO.idle, f = OUTFIT_FIT[id] || { s: 1, dx: 0, dy: 0 }, box = alphaBox(path, im);
+  const tw = T.x1 - T.x0, th = T.y1 - T.y0, k = Math.max(tw / box.w, th / box.h) * f.s, w = box.w * k, h = box.h * k;
+  c = document.createElement('canvas'); c.width = mask.width; c.height = mask.height;
+  const g = c.getContext('2d');
+  g.drawImage(mask, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.drawImage(im, box.x, box.y, box.w, box.h, T.x0 + tw / 2 - w / 2 + f.dx * tw, T.y0 + th / 2 - h / 2 + f.dy * th, w, h);
+  layers.set(key, c);
+  return c;
+}
+
+// Draws hat + outfit for drawBoat's wear callback. With the sprite art (a = ANCHOR.ART) the worn items are the
+// shop-icon art fitted by HEAD/TORSO + the fit tables; the code-drawn HATS/OUTFITS are only the no-art fallback.
+export const wearDrawn = { hat: null, outfit: null }; // smoke test: the art the last wear call drew (null = fallback/none)
 export function wearDrawer(equip) {
-  return (c, a = ANCHOR.CODE) => {
+  return (c, a = ANCHOR.CODE, pose = 'idle') => {
+    wearDrawn.hat = wearDrawn.outfit = null;
+    if (a === ANCHOR.ART) {
+      const [bx, by, bw] = a.box;
+      c.save(); c.translate(bx, by); c.scale(bw / SPRITE_W, bw / SPRITE_W);
+      const layer = equip.outfit && outfitLayer(equip.outfit, pose);
+      if (layer) { c.drawImage(layer, 0, 0); wearDrawn.outfit = `icons/icon_${equip.outfit}.png`; }
+      if (equip.hat && drawHatArt(c, equip.hat, pose)) wearDrawn.hat = `icons/icon_${equip.hat}.png`;
+      c.restore();
+      return;
+    }
     if (equip.outfit && OUTFITS[equip.outfit]) {
       c.save(); c.translate(...a.body); c.scale(a.bodyScale, a.bodyScale); OUTFITS[equip.outfit](c); c.restore();
     }
@@ -90,12 +199,20 @@ const ICONS = {
   boot(c) { c.fillStyle = '#7f5539'; c.beginPath(); c.moveTo(-10, -18); c.lineTo(4, -18); c.lineTo(4, 2); c.lineTo(18, 4); c.lineTo(18, 14); c.lineTo(-10, 14); c.fill(); },
   ball(c) { circ(c, 0, 0, 18, '#3a0ca3'); circ(c, -5, -6, 2.5, '#111'); circ(c, 3, -8, 2.5, '#111'); circ(c, -1, -1, 2.5, '#111'); },
   drum(c) { box(c, -14, -20, 28, 40, '#2a9d8f'); box(c, -14, -8, 28, 3, '#1d6f66'); box(c, -14, 6, 28, 3, '#1d6f66'); },
+  // v1.4 start-depth items (fallbacks until Kakashi's icons #202-206 arrive)
+  anvil(c) { c.fillStyle = '#343a40'; c.beginPath(); c.moveTo(-22, -12); c.lineTo(18, -12); c.quadraticCurveTo(24, -10, 24, -4); c.lineTo(8, -2); c.lineTo(8, 8); c.lineTo(14, 16); c.lineTo(-14, 16); c.lineTo(-8, 8); c.lineTo(-8, -2); c.lineTo(-20, -4); c.closePath(); c.fill(); box(c, -20, -12, 36, 3, '#6c757d'); },
+  chest(c) { box(c, -20, -6, 40, 24, '#8b5a2b'); c.fillStyle = '#a0522d'; c.beginPath(); c.moveTo(-20, -6); c.quadraticCurveTo(0, -24, 20, -6); c.fill(); box(c, -20, -4, 40, 4, '#ffd166'); box(c, -4, -2, 8, 10, '#ffd166'); circ(c, -8, -12, 3, '#ffe066'); circ(c, 6, -13, 3, '#ffe066'); },
+  leadboots(c) { for (const x of [-12, 8]) { c.fillStyle = '#6c757d'; c.beginPath(); c.moveTo(x - 6, -18); c.lineTo(x + 4, -18); c.lineTo(x + 4, 6); c.lineTo(x + 12, 8); c.lineTo(x + 12, 16); c.lineTo(x - 6, 16); c.fill(); box(c, x - 6, -6, 10, 3, '#ffd166'); } },
+  piano(c) { c.fillStyle = '#111'; c.beginPath(); c.moveTo(-22, -6); c.lineTo(10, -6); c.quadraticCurveTo(24, -6, 22, 8); c.lineTo(-22, 8); c.closePath(); c.fill(); box(c, -22, 8, 30, 6, '#f8f9fa'); for (let x = -19; x < 8; x += 5) box(c, x, 8, 2, 4, '#111'); box(c, -20, 14, 3, 8, '#111'); box(c, 14, 8, 3, 14, '#111'); c.strokeStyle = '#111'; c.lineWidth = 2; c.beginPath(); c.moveTo(-18, -6); c.lineTo(-4, -20); c.stroke(); },
+  anchor(c) { c.strokeStyle = '#495057'; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.arc(0, -16, 5, 0, TAU); c.moveTo(0, -11); c.lineTo(0, 18); c.moveTo(-10, -4); c.lineTo(10, -4); c.moveTo(-18, 6); c.quadraticCurveTo(-14, 20, 0, 18); c.quadraticCurveTo(14, 20, 18, 6); c.stroke(); },
 };
 
 function bolt(c) { c.fillStyle = '#ffd166'; c.beginPath(); c.moveTo(4, -26); c.lineTo(-4, -12); c.lineTo(2, -12); c.lineTo(-4, 0); c.lineTo(10, -16); c.lineTo(4, -16); c.closePath(); c.fill(); }
 
 export function drawItemIcon(c, it, x, y) {
   if (drawArt(c, `icons/icon_${it.id}.png`, x - 32, y - 32, 64, 64)) return;
+  // v1.4 lines without their own art yet borrow the 700 m reel's art (their prompts are in ASSET_PROMPTS #197-201)
+  if (it.cat === 'lines' && Number.isFinite(it.line) && drawArt(c, 'icons/icon_line5.png', x - 32, y - 32, 64, 64)) return;
   c.save(); c.translate(x, y);
   if (it.hat && HATS[it.id]) { circ(c, 0, 10, 16, '#ffd7b5'); c.translate(0, 10); HATS[it.id](c); }
   else if (it.outfit && OUTFITS[it.id]) { c.translate(0, 42); c.scale(0.9, 0.9); OUTFITS[it.id](c); }

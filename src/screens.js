@@ -12,7 +12,10 @@ import { SPECIES } from './data/fish.js';
 import { settleRun } from './settle.js';
 import { sfx } from './audio.js';
 import { PRESET_NAMES, PRESET_COLORS, freshSlot } from './save.js';
-import { drawFish, drawFishSprite, fishArtPath } from './fishart.js';
+import { drawFish, drawFishSprite, fishArtPath, GOLD_INK } from './fishart.js';
+import { goldenCount } from './economy.js';
+import { BY_ID } from './data/fish.js';
+import { FINAL_BOSS } from './data/zones.js';
 import { art } from './art.js';
 import { codeUI, openExport, openImport, pickSlot } from './codeui.js';
 
@@ -119,9 +122,9 @@ G.scenes.payout = {
       glow.addColorStop(0, 'rgba(255,240,170,0.75)'); glow.addColorStop(1, 'rgba(255,240,170,0)');
       ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(W / 2, cy, HERO * 0.62, 0, Math.PI * 2); ctx.fill();
       ctx.save(); ctx.translate(W / 2, cy + bob); ctx.scale(k, k);
-      if (drawFishSprite(ctx, h.sp, 0, 0, HERO, t)) payoutDrawn.hero = h.art;
+      if (drawFishSprite(ctx, h.sp, 0, 0, HERO, t, h.golden)) payoutDrawn.hero = h.art;
       ctx.restore();
-      text(ctx, h.sp.name, W / 2, 292, 32, '#fff');
+      text(ctx, h.golden ? `Golden ${h.sp.name}` : h.sp.name, W / 2, 292, 32, h.golden ? GOLD_INK : '#fff');
       text(ctx, `${h.pay < 0 ? '-' : ''}$${Math.abs(Math.round(h.pay)).toLocaleString()}`, W / 2, 330, 28, h.pay < 0 ? '#ff8fa3' : '#ffe066');
     }
     const shown = p.rows.slice(0, ROWS);
@@ -129,13 +132,17 @@ G.scenes.payout = {
       const y = ROW_Y + i * ROW_H, k = Math.min(1, Math.max(0, tally * shown.length - i));
       if (k <= 0) return;
       ctx.globalAlpha = k;
-      ctx.fillStyle = 'rgba(255,255,255,0.18)'; rr(ctx, 30, y - 24, W - 60, 48, 14); ctx.fill();
-      if (drawFishSprite(ctx, r.sp, 74, y, 46, t)) payoutDrawn.rows.push(r.art);
-      text(ctx, `${r.sp.name}${r.n > 1 ? ' ×' + r.n : ''}`, 110, y, 22, '#fff', 'left');
-      text(ctx, `${r.pay < 0 ? '-' : ''}$${Math.abs(Math.round(r.pay)).toLocaleString()}`, W - 50, y, 24, r.pay < 0 ? '#ff8fa3' : '#ffe066', 'right');
+      ctx.fillStyle = r.golden ? 'rgba(255,210,63,0.35)' : 'rgba(255,255,255,0.18)'; rr(ctx, 30, y - 24, W - 60, 48, 14); ctx.fill();
+      if (r.golden) { ctx.strokeStyle = GOLD_INK; ctx.lineWidth = 3; ctx.stroke(); }
+      if (drawFishSprite(ctx, r.sp, 74, y, 46, t, r.golden)) payoutDrawn.rows.push(r.art);
+      const name = `${r.golden ? 'Golden ' : ''}${r.sp.name}${r.n > 1 ? ' ×' + r.n : ''}`;
+      text(ctx, name, 110, y, name.length > 24 ? 17 : 22, r.golden ? GOLD_INK : '#fff', 'left');
+      if (r.golden) text(ctx, `${r.mult}× pay!`, W - 50, y - 15, 13, '#fff6c2', 'right');
+      text(ctx, `${r.pay < 0 ? '-' : ''}$${Math.abs(Math.round(r.pay)).toLocaleString()}`, W - 50, y + (r.golden ? 7 : 0), r.golden ? 20 : 24, r.pay < 0 ? '#ff8fa3' : '#ffe066', 'right');
       ctx.globalAlpha = 1;
     });
     if (p.rows.length > shown.length) text(ctx, `+ ${p.rows.length - shown.length} more kinds`, W / 2, ROW_Y + ROWS * ROW_H - 14, 20, '#cfe9ff');
+    payoutDrawn.golden = p.rows.filter((r) => r.golden).length;
     if (p.lost) text(ctx, `${p.lost} got away`, W / 2, 710, 20, '#cfe9ff');
     const news = [p.newSpecies.length && `${p.newSpecies.length} new for your fish book!`, ...p.opened.map((z) => `${z.name} is open!`)].filter(Boolean);
     news.forEach((n, i) => text(ctx, n, W / 2, 742 + i * 28 - (news.length - 1) * 14, 22, '#b9fbc0'));
@@ -143,17 +150,28 @@ G.scenes.payout = {
     text(ctx, `Wallet: $${G.slot.cash.toLocaleString()}`, W / 2, 850, 24, '#fff');
     bigButton(ctx, 120, 870, 300, 76, tally < 1 ? 'SKIP' : 'OK', () => {
       if (tally < 1) { tally = 1; return; }
+      if (p.bossLanded) ending.story = p.story;
       G.go(p.bossLanded ? 'bossLanded' : 'done');
     });
   },
 };
 
 // ---- ending: an original, gentle 3-panel comic ----
+// v1.4: two stories. 'ice' plays the first time the Frozen Block (#43) is landed (the penguin buddy joins);
+// the final one plays the first time Grandpa Dragonfish (the Dragon's Deep boss) is landed (the Whirlpool opens).
 const ICE = SPECIES[42], PENGUIN = SPECIES[46];
+export const ending = { story: FINAL_BOSS };
 let comic = 0;
+const STORIES = {
+  43: { lines: ['Something big and cold is on the line!', 'The warm sun melts the ice… drip, drip…', 'A little penguin! A new fishing buddy!'],
+    end: ['Brrr-illiant!', 'New seas are waiting! Tap to keep fishing'] },
+  [FINAL_BOSS]: { lines: ['Something HUGE is on the line!', 'It\'s Grandpa Dragonfish… and he\'s smiling!', 'He shows you the way to the Whirlpool!'],
+    end: ['THE END… or is it?', 'The Whirlpool is open! Tap to keep fishing'] },
+};
 function panel(ctx, i, y, t) {
   const show = Math.max(0, Math.min(1, comic - i * 1.6));
   if (show <= 0) return;
+  const story = ending.story === 43 ? 43 : FINAL_BOSS, big = story === 43 ? ICE : BY_ID.get(FINAL_BOSS);
   ctx.save(); ctx.globalAlpha = show;
   ctx.fillStyle = '#fffaf0'; rr(ctx, 30, y, W - 60, 240, 20); ctx.fill();
   ctx.strokeStyle = '#1b263b'; ctx.lineWidth = 5; ctx.stroke();
@@ -162,21 +180,37 @@ function panel(ctx, i, y, t) {
   g.addColorStop(0, i === 1 ? '#ffd6a5' : '#bde0fe'); g.addColorStop(0.62, '#e0f2ff'); g.addColorStop(0.62, '#48b5e0'); g.addColorStop(1, '#1d6f9e');
   ctx.fillStyle = g; ctx.fillRect(30, y, W - 60, 240);
   const wy = y + 150;
-  if (i === 0) { drawBoat(ctx, 170, wy + 4, t, G.slot.color, wearDrawer(G.slot.equip)); drawFish(ctx, ICE, 380, wy - 40 + Math.sin(t * 3) * 6, 56, 1, t); }
-  if (i === 1) {
+  if (i === 0) { drawBoat(ctx, 170, wy + 4, t, G.slot.color, wearDrawer(G.slot.equip)); drawFish(ctx, big, 380, wy - 40 + Math.sin(t * 3) * 6, 56, 1, t); }
+  if (i === 1 && story === 43) {
     ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(430, y + 50, 34, 0, Math.PI * 2); ctx.fill();
     drawBoat(ctx, 170, wy + 4, t, G.slot.color, wearDrawer(G.slot.equip));
     ctx.save(); ctx.globalAlpha *= 0.75; drawFish(ctx, ICE, 360, wy - 34, 42, 1, t); ctx.restore();
     ctx.fillStyle = '#4cc9f0'; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(330 + k * 20, wy - 2 + ((t * 60 + k * 15) % 30), 4, 0, Math.PI * 2); ctx.fill(); }
   }
-  if (i === 2) {
+  if (i === 1 && story !== 43) {
+    drawBoat(ctx, 150, wy + 4, t, G.slot.color, wearDrawer(G.slot.equip));
+    drawFish(ctx, big, 370, wy - 30 + Math.sin(t * 2) * 5, 64, -1, t);
+    hearts(ctx, [[300, y + 50], [440, y + 40]], t);
+  }
+  if (i === 2 && story === 43) {
     drawBoat(ctx, 230, wy + 4, t, G.slot.color, wearDrawer(G.slot.equip));
     drawFish(ctx, PENGUIN, 290, wy - 52 + Math.abs(Math.sin(t * 5)) * -10, 24, -1, t);
-    ctx.fillStyle = '#ff6b9a'; for (const [hx, hy] of [[260, wy - 110], [320, wy - 125]]) { ctx.beginPath(); ctx.arc(hx - 5, hy, 6, 0, Math.PI * 2); ctx.arc(hx + 5, hy, 6, 0, Math.PI * 2); ctx.moveTo(hx - 11, hy + 2); ctx.lineTo(hx, hy + 14); ctx.lineTo(hx + 11, hy + 2); ctx.fill(); }
+    hearts(ctx, [[260, wy - 110], [320, wy - 125]], t);
+  }
+  if (i === 2 && story !== 43) { // a swirling whirlpool opens in the sea
+    for (let k = 0; k < 4; k++) {
+      ctx.strokeStyle = `rgba(255,255,255,${0.8 - k * 0.15})`; ctx.lineWidth = 5; ctx.beginPath();
+      ctx.ellipse(380, wy + 40, 100 - k * 22, 30 - k * 6, 0, t * (2 + k) , t * (2 + k) + Math.PI * 1.4); ctx.stroke();
+    }
+    drawBoat(ctx, 160, wy + 4, t, G.slot.color, wearDrawer(G.slot.equip));
   }
   ctx.restore();
-  text(ctx, ['Something big and cold is on the line!', 'The warm sun melts the ice… drip, drip…', 'A little penguin! A new fishing buddy!'][i], W / 2, y + 212, 20, '#fff');
+  text(ctx, STORIES[story].lines[i], W / 2, y + 212, 20, '#fff');
   ctx.restore();
+}
+function hearts(ctx, at) {
+  ctx.fillStyle = '#ff6b9a';
+  for (const [hx, hy] of at) { ctx.beginPath(); ctx.arc(hx - 5, hy, 6, 0, Math.PI * 2); ctx.arc(hx + 5, hy, 6, 0, Math.PI * 2); ctx.moveTo(hx - 11, hy + 2); ctx.lineTo(hx, hy + 14); ctx.lineTo(hx + 11, hy + 2); ctx.fill(); }
 }
 
 G.scenes.ending = {
@@ -188,8 +222,9 @@ G.scenes.ending = {
     drawSea(ctx, [255, 214, 165], [255, 158, 170], 0, t);
     panel(ctx, 0, 30, t); panel(ctx, 1, 300, t); panel(ctx, 2, 570, t);
     if (comic > 5) {
-      text(ctx, 'THE END… or is it?', W / 2, 860, 40, '#fff');
-      text(ctx, 'The Whirlpool is open! Tap to keep fishing', W / 2, 910, 20, '#fff');
+      const [a, b] = STORIES[ending.story === 43 ? 43 : FINAL_BOSS].end;
+      text(ctx, a, W / 2, 860, 40, '#fff');
+      text(ctx, b, W / 2, 910, 20, '#fff');
     }
   },
 };
@@ -201,9 +236,9 @@ const DEX_PAGE = 16;
 
 // Original hint text for a species not found yet.
 export function hint(sp) {
-  const z = ZONES[sp.zone - 1].name, band = Number.isFinite(sp.dMax) ? `${sp.dMin}–${sp.dMax} m` : `below ${sp.dMin} m`;
+  const z = ZONES[sp.zone - 1].name, band = Number.isFinite(sp.dMax) ? `${sp.dMin.toLocaleString('en-US')}–${sp.dMax.toLocaleString('en-US')} m` : `below ${sp.dMin.toLocaleString('en-US')} m`;
   const extra = sp.cond.map((c) => ({ day: 'by day', night: 'at night', midnight: 'around midnight', post: 'after the big ending',
-    pre: '', 'hat:suncrown': 'with a royal hat', 'hat:frost': 'with a cosy hat', 'suit:pajamas': 'in fancy pajamas' }[c] ?? (c.startsWith('after:') ? 'if you bump its friend' : ''))).filter(Boolean);
+    pre: '', 'pre:3': '', 'post:3': 'after the ice melts', 'hat:suncrown': 'with a royal hat', 'hat:frost': 'with a cosy hat', 'suit:pajamas': 'in fancy pajamas' }[c] ?? (c.startsWith('after:') ? 'if you bump its friend' : ''))).filter(Boolean);
   if (sp.rarity === 'boss') extra.push('at the very bottom');
   return [`${z} · ${band}`, extra.join(', ')];
 }
@@ -231,6 +266,8 @@ G.scenes.dex = {
       ctx.fillStyle = dexState.pick === sp ? 'rgba(255,209,102,0.55)' : 'rgba(255,255,255,0.2)'; rr(ctx, x, y, 118, 118, 16); ctx.fill();
       drawFish(ctx, sp, x + 59, y + 52, Math.min(sp.r, 30), 1, t, { silhouette: !known });
       text(ctx, known ? sp.name : '???', x + 59, y + 102, sp.name.length > 12 ? 13 : 15, known ? '#fff' : '#9fb7c9');
+      const gold = goldenCount(slot, sp.id);
+      if (gold) goldStar(ctx, x + 100, y + 18, gold);
     });
     const p = dexState.pick;
     ctx.fillStyle = 'rgba(0,30,50,0.35)'; rr(ctx, 16, 652, W - 32, 190, 18); ctx.fill();
@@ -240,8 +277,10 @@ G.scenes.dex = {
       drawFish(ctx, p, 90, 747, 40, 1, t);
       text(ctx, p.name, 160, 690, 28, '#fff', 'left');
       text(ctx, `Worth ${worth < 0 ? '-' : ''}$${Math.abs(worth).toLocaleString()}${p.jelly ? ' (ouch!)' : ''}`, 160, 732, 22, worth < 0 ? '#ff8fa3' : '#ffe066', 'left');
-      text(ctx, `Caught ${e.n} · deepest ${e.best} m`, 160, 770, 20, '#e0f2ff', 'left', '600');
+      text(ctx, `Caught ${e.n} · deepest ${e.best.toLocaleString('en-US')} m`, 160, 770, 20, '#e0f2ff', 'left', '600');
+      const gold = goldenCount(slot, p.id);
       text(ctx, ZONES[p.zone - 1].name, 160, 806, 20, '#cfe9ff', 'left', '600');
+      if (gold) { goldStar(ctx, W - 58, 728, gold); text(ctx, 'golden', W - 58, 752, 13, GOLD_INK); }
     } else {
       const [a, b] = hint(p);
       drawFish(ctx, p, 90, 747, 40, 1, t, { silhouette: true });
@@ -254,6 +293,14 @@ G.scenes.dex = {
     text(ctx, `${dexState.page + 1} / ${pages}`, W / 2, 900, 26);
   },
 };
+// Gold star + count: a species' golden catches (v1.4).
+function goldStar(ctx, x, y, n) {
+  ctx.fillStyle = GOLD_INK; ctx.strokeStyle = 'rgba(90,50,0,0.8)'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, q = i % 2 ? 6 : 14; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  text(ctx, String(n), x, y + 1, 11, '#5a3200', 'center');
+}
+
 // ---- kid slots ----
 const cycle = (list, v, d = 1) => list[(list.indexOf(v) + d + list.length) % list.length];
 export const SLOT_CARD = { Y: 116, STEP: 240, H: 228 }; // v1.3: a touch shorter, to fit the Import code button
@@ -272,7 +319,7 @@ G.scenes.slots = {
       ctx.strokeStyle = !picking ? 'rgba(255,255,255,0.8)' : codeUI.confirm === i ? '#ff4d6d' : '#ffe066'; ctx.lineWidth = picking ? 8 : 5; ctx.stroke();
       drawBoat(ctx, 110, y + 196, t + i, view.color === '#ffd166' ? '#ff6b9a' : '#ffd166', wearDrawer(view.equip));
       text(ctx, view.name, 340, y + 44, 34, '#fff');
-      text(ctx, slot ? `$${slot.cash.toLocaleString()} · ${Object.keys(slot.dex).length}/66 fish` : 'New player!', 340, y + 88, 22, '#fff');
+      text(ctx, slot ? `$${slot.cash.toLocaleString()} · ${Object.keys(slot.dex).length}/${SPECIES.length} fish` : 'New player!', 340, y + 88, 22, '#fff');
       text(ctx, picking ? (slot ? 'tap to replace' : 'tap to load here') : 'tap to play', 340, y + 122, 20, 'rgba(255,255,255,0.85)');
       if (picking) return;
       const ensure = () => (G.data.slots[i] ||= freshSlot(i)), free = () => !codeUI.mode;
