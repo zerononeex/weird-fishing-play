@@ -1,5 +1,5 @@
 // Code-drawn shop icons and wearables. All original vector shapes; art slots override when present.
-import { art, drawArt } from './art.js';
+import { art, drawArt, hasArt } from './art.js';
 const TAU = Math.PI * 2;
 
 function circ(c, x, y, r, f) { c.fillStyle = f; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
@@ -136,8 +136,20 @@ function outfitLayer(id, pose) {
   return c;
 }
 
-// Draws hat + outfit for drawBoat's wear callback. With the sprite art (a = ANCHOR.ART) the worn items are the
-// shop-icon art fitted by HEAD/TORSO + the fit tables; the code-drawn HATS/OUTFITS are only the no-art fallback.
+// v1.4.1 worn layers: assets/art/worn/worn_<id>_<pose>.png is the item painted onto that pose and normalized with the
+// pose's own crop + scale (tools/normalize-art.py), so it is drawn 1:1 in the sprite's draw box — no fit tables.
+export const wornPath = (id, pose) => `worn/worn_${id}_${pose === 'cast' ? 'cast' : 'idle'}.png`;
+// One slot on the sprite: the worn layer when the build has it (nothing while it loads, so the icon art never flashes
+// on), else the v1.4 icon-art fit. Returns the art path drawn, or null.
+function wearSlot(c, id, pose, iconFit) {
+  const path = wornPath(id, pose);
+  if (hasArt(path)) { const im = art(path); if (!im) return null; c.drawImage(im, 0, 0, SPRITE_W, im.naturalHeight * SPRITE_W / im.naturalWidth); return path; }
+  return iconFit() ? `icons/icon_${id}.png` : null;
+}
+
+// Draws hat + outfit for drawBoat's wear callback. With the sprite art (a = ANCHOR.ART) the worn items are the worn
+// layers (base sprite → outfit → hat); items without one use the shop-icon art fitted by HEAD/TORSO + the fit
+// tables; the code-drawn HATS/OUTFITS are only the no-art fallback.
 export const wearDrawn = { hat: null, outfit: null }; // smoke test: the art the last wear call drew (null = fallback/none)
 export function wearDrawer(equip) {
   return (c, a = ANCHOR.CODE, pose = 'idle') => {
@@ -145,9 +157,12 @@ export function wearDrawer(equip) {
     if (a === ANCHOR.ART) {
       const [bx, by, bw] = a.box;
       c.save(); c.translate(bx, by); c.scale(bw / SPRITE_W, bw / SPRITE_W);
-      const layer = equip.outfit && outfitLayer(equip.outfit, pose);
-      if (layer) { c.drawImage(layer, 0, 0); wearDrawn.outfit = `icons/icon_${equip.outfit}.png`; }
-      if (equip.hat && drawHatArt(c, equip.hat, pose)) wearDrawn.hat = `icons/icon_${equip.hat}.png`;
+      if (equip.outfit) wearDrawn.outfit = wearSlot(c, equip.outfit, pose, () => {
+        const layer = outfitLayer(equip.outfit, pose);
+        if (layer) c.drawImage(layer, 0, 0);
+        return !!layer;
+      });
+      if (equip.hat) wearDrawn.hat = wearSlot(c, equip.hat, pose, () => drawHatArt(c, equip.hat, pose));
       c.restore();
       return;
     }
