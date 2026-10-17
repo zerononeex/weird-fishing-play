@@ -5,7 +5,7 @@ import { art, drawArt } from './art.js';
 import { ANCHOR } from './icons.js';
 import { sawHeld } from './input.js';
 
-const { W, H } = CONFIG;
+const { H } = CONFIG; // W is live (v1.4.2): always CONFIG.W
 export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
 export function rr(ctx, x, y, w, h, r) {
@@ -30,20 +30,20 @@ export function lerpRgb(a, b, t) { return [mix(a[0], b[0], t), mix(a[1], b[1], t
 export function drawSea(ctx, top, bottom, scroll, t, bg = null) {
   const im = bg && art(bg);
   if (im) { // tall full-bleed art scrolls slowly with depth; every other tile is mirrored so the seams match
-    const h = (W * im.naturalHeight) / im.naturalWidth, pos = scroll * 0.25, first = Math.floor(pos / h);
+    const h = (CONFIG.W * im.naturalHeight) / im.naturalWidth, pos = scroll * 0.25, first = Math.floor(pos / h);
     for (let i = first, y = first * h - pos; y < H; i++, y += h) {
-      if (i % 2 === 0) ctx.drawImage(im, 0, y, W, h);
-      else { ctx.save(); ctx.translate(0, y + h); ctx.scale(1, -1); ctx.drawImage(im, 0, 0, W, h); ctx.restore(); }
+      if (i % 2 === 0) ctx.drawImage(im, 0, y, CONFIG.W, h);
+      else { ctx.save(); ctx.translate(0, y + h); ctx.scale(1, -1); ctx.drawImage(im, 0, 0, CONFIG.W, h); ctx.restore(); }
     }
-    ctx.fillStyle = `rgba(${bottom},${Math.min(0.75, scroll / 9000)})`; ctx.fillRect(0, 0, W, H); // darken with depth
+    ctx.fillStyle = `rgba(${bottom},${Math.min(0.75, scroll / 9000)})`; ctx.fillRect(0, 0, CONFIG.W, H); // darken with depth
   } else {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, `rgb(${top})`); g.addColorStop(1, `rgb(${bottom})`);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, CONFIG.W, H);
   }
   ctx.fillStyle = 'rgba(255,255,255,0.08)';
   for (let i = 0; i < 24; i++) {
-    const x = (i * 197 + Math.sin(t * 0.6 + i) * 12) % W;
+    const x = (i * 197 + Math.sin(t * 0.6 + i) * 12) % CONFIG.W;
     const y = (((i * 331 - scroll * (0.4 + (i % 3) * 0.2)) % H) + H) % H;
     ctx.beginPath(); ctx.arc(x, y, 2 + (i % 4), 0, Math.PI * 2); ctx.fill();
   }
@@ -146,19 +146,19 @@ export function drawBoat(ctx, x, y, t, color = '#ff6b9a', wear = null, buddy = n
 // up to follow airborne fish, clouds drift with parallax and the sea slides down out of view.
 export function drawSky(ctx, waterY, t, night = false, cam = 0, zoom = 1) {
   const sky = !night && art('bg/sky_shoot.png');
-  if (sky) { const h = (W * sky.naturalHeight) / sky.naturalWidth; ctx.drawImage(sky, 0, Math.min(0, H - h - cam * 0.3), W, h); }
+  if (sky) { const h = (CONFIG.W * sky.naturalHeight) / sky.naturalWidth; ctx.drawImage(sky, 0, Math.min(0, H - h - cam * 0.3), CONFIG.W, h); }
   else {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   const high = Math.min(1, -cam / 2000); // deeper blue the higher the camera climbs
   g.addColorStop(0, night ? '#071228' : high > 0.3 ? '#3fa9e8' : '#7fd3ff'); g.addColorStop(1, night ? '#28407a' : '#d8f3ff');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, CONFIG.W, H);
   }
   const sunY = 120 - cam * 0.15;
-  if (night) { ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(430, sunY, 34, 0, Math.PI * 2); ctx.fill(); }
-  else { ctx.fillStyle = '#ffe066'; ctx.beginPath(); ctx.arc(430, sunY, 40, 0, Math.PI * 2); ctx.fill(); }
+  if (night) { ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(CONFIG.W - 110, sunY, 34, 0, Math.PI * 2); ctx.fill(); }
+  else { ctx.fillStyle = '#ffe066'; ctx.beginPath(); ctx.arc(CONFIG.W - 110, sunY, 40, 0, Math.PI * 2); ctx.fill(); }
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   for (const [x, y, s] of [[90, 170, 1], [300, 90, 0.8], [520, 260, 1.2], [200, -500, 1], [420, -900, 0.9], [60, -1400, 1.1]]) {
-    const cx = ((x + t * 12 * s) % (W + 160)) - 80, cy = y - cam * 0.5;
+    const cx = ((x + t * 12 * s) % (CONFIG.W + 160)) - 80, cy = y - cam * 0.5;
     if (cy < -60 || cy > H + 60) continue;
     ctx.beginPath(); ctx.arc(cx, cy, 26 * s, 0, Math.PI * 2); ctx.arc(cx + 28 * s, cy + 6, 20 * s, 0, Math.PI * 2); ctx.arc(cx - 26 * s, cy + 8, 18 * s, 0, Math.PI * 2); ctx.fill();
   }
@@ -166,9 +166,9 @@ export function drawSky(ctx, waterY, t, night = false, cam = 0, zoom = 1) {
   if (wy >= H) return;
   const sea = ctx.createLinearGradient(0, wy, 0, wy + (H - waterY));
   sea.addColorStop(0, night ? '#1d3557' : '#48b5e0'); sea.addColorStop(1, night ? '#081426' : '#0b3d5c');
-  ctx.fillStyle = sea; ctx.fillRect(0, wy, W, H - wy);
+  ctx.fillStyle = sea; ctx.fillRect(0, wy, CONFIG.W, H - wy);
   ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3; ctx.beginPath();
-  for (let x = 0; x <= W; x += 10) ctx.lineTo(x, wy + Math.sin(x * 0.05 + t * 2) * 3);
+  for (let x = 0; x <= CONFIG.W; x += 10) ctx.lineTo(x, wy + Math.sin(x * 0.05 + t * 2) * 3);
   ctx.stroke();
 }
 

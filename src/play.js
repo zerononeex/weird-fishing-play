@@ -20,7 +20,7 @@ import { fishPay } from './economy.js';
 import { input, sawHeld } from './input.js';
 import { KNIFE_BTN } from './ui.js';
 
-const { W, H, PX_PER_M } = CONFIG;
+const { H, PX_PER_M } = CONFIG; // W is live (v1.4.2): always CONFIG.W
 const CAST_S = 0.8, TURN_S = 0.5;
 // v1.2: the cast moment sits 64 px lower (surface line lower on screen), then eases up to the dive position.
 // v1.4: the dock boat moved down another 146 px (WATER 394 -> 540), so the cast surface drops by the same amount.
@@ -57,13 +57,13 @@ function placeBoss(zone, allowed) {
   if (!zone.boss || G.run.lineLength < zone.maxDepth) return;
   const boss = BY_ID.get(zone.boss), post = zone.postBoss && BY_ID.get(zone.postBoss);
   const sp = allowed(boss) ? boss : post && allowed(post) ? post : null;
-  if (sp) G.run.fish.push(makeFish(sp, W / 2, zone.maxDepth - 4));
+  if (sp) G.run.fish.push(makeFish(sp, CONFIG.W / 2, zone.maxDepth - 4));
 }
 
 function knifeButton(ctx) {
   if (!G.run.knife) return;
-  const k = KNIFE_BTN, cx = W - 20 - k / 2, cy = 24 + k / 2;
-  addButton({ x: W - 20 - k, y: 24, w: k, h: k, onTap: () => { sfx.knife(); sawLoop(false); G.go('knife'); }, silent: true, label: 'KNIFE' });
+  const k = KNIFE_BTN, cx = CONFIG.W - 20 - k / 2, cy = 24 + k / 2;
+  addButton({ x: CONFIG.W - 20 - k, y: 24, w: k, h: k, onTap: () => { sfx.knife(); sawLoop(false); G.go('knife'); }, silent: true, label: 'KNIFE' });
   ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(cx, cy, k / 2 - 2, 0, Math.PI * 2); ctx.fill();
   ctx.save(); ctx.translate(cx, cy); ctx.scale(k / 76, k / 76); ctx.rotate(-0.7);
   ctx.fillStyle = '#e8eef3'; ctx.beginPath(); ctx.moveTo(-4, -26); ctx.lineTo(6, -26); ctx.lineTo(4, 6); ctx.lineTo(-4, 6); ctx.fill();
@@ -80,17 +80,18 @@ let dark = null;
 function darkness(ctx, run) {
   const l = light(run.zone, run.depth, run.lamp || 0);
   if (l >= 0.99) return;
-  if (!dark) { dark = document.createElement('canvas'); dark.width = W / 2; dark.height = H / 2; }
+  if (!dark) dark = document.createElement('canvas');
+  if (dark.width !== Math.ceil(CONFIG.W / 2)) { dark.width = Math.ceil(CONFIG.W / 2); dark.height = H / 2; } // follows the live width
   const d = dark.getContext('2d');
   d.setTransform(0.5, 0, 0, 0.5, 0, 0);
   d.globalCompositeOperation = 'source-over';
-  d.clearRect(0, 0, W, H);
-  d.fillStyle = `rgba(2,8,22,${(1 - l).toFixed(3)})`; d.fillRect(0, 0, W, H);
+  d.clearRect(0, 0, CONFIG.W, H);
+  d.fillStyle = `rgba(2,8,22,${(1 - l).toFixed(3)})`; d.fillRect(0, 0, CONFIG.W, H);
   d.globalCompositeOperation = 'destination-out';
   const r = lampRadius(run.zone, run.lamp || 0), g = d.createRadialGradient(run.lure.x, lureY, r * 0.25, run.lure.x, lureY, r);
   g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  d.fillStyle = g; d.fillRect(0, 0, W, H);
-  ctx.drawImage(dark, 0, 0, W, H);
+  d.fillStyle = g; d.fillRect(0, 0, CONFIG.W, H);
+  ctx.drawImage(dark, 0, 0, CONFIG.W, H);
 }
 
 function fuelBar(ctx, run) {
@@ -111,7 +112,7 @@ function strike(x, y) {
   flash = 0.18;
 }
 function drawBolts(ctx) {
-  if (flash > 0) { ctx.fillStyle = `rgba(255,255,240,${(flash / 0.18) * 0.45})`; ctx.fillRect(0, 0, W, H); }
+  if (flash > 0) { ctx.fillStyle = `rgba(255,255,240,${(flash / 0.18) * 0.45})`; ctx.fillRect(0, 0, CONFIG.W, H); }
   const im = art('fx/lightning.png');
   for (const b of bolts) {
     ctx.globalAlpha = Math.max(0, b.life / 0.3);
@@ -131,7 +132,7 @@ function stepBolts(dt) {
 // Equipped charm icon + charge pips next to the hook (descent only).
 function charmPips(ctx, run) {
   if (!run.charm || run.mode !== 'descent' || !run.chargesMax) return;
-  const x = run.lure.x + (run.lure.x > W - 120 ? -64 : 64), y = lureY;
+  const x = run.lure.x + (run.lure.x > CONFIG.W - 120 ? -64 : 64), y = lureY;
   ctx.fillStyle = 'rgba(0,30,50,0.45)'; ctx.beginPath(); ctx.arc(x, y - 6, 24, 0, Math.PI * 2); ctx.fill();
   ctx.save(); ctx.translate(x, y - 6); ctx.scale(0.75, 0.75); drawItemIcon(ctx, ITEM[run.charm], 0, 0); ctx.restore();
   for (let i = 0; i < run.chargesMax; i++) {
@@ -161,16 +162,16 @@ function castTop(ctx, surfY, night) {
   castTopDrawn.at = -1;
   const im = art('bg/cast_top.png');
   if (!im) return false;
-  const h = (W * im.naturalHeight) / im.naturalWidth, top = surfY - h * CAST_TOP.SURFACE, bottom = top + h;
+  const h = (CONFIG.W * im.naturalHeight) / im.naturalWidth, top = surfY - h * CAST_TOP.SURFACE, bottom = top + h;
   if (bottom <= 0) return true;
-  ctx.drawImage(fadedArt('bg/cast_top.png', CAST_TOP.FADE / h), 0, top, W, h);
+  ctx.drawImage(fadedArt('bg/cast_top.png', CAST_TOP.FADE / h), 0, top, CONFIG.W, h);
   // v1.4: with the lower cast surface the image top can sit below y 0; stretch its top sky row over the gap
-  if (top > 0) ctx.drawImage(im, 0, 0, im.naturalWidth, 2, 0, 0, W, top + 1);
+  if (top > 0) ctx.drawImage(im, 0, 0, im.naturalWidth, 2, 0, 0, CONFIG.W, top + 1);
   if (night) { // same darkening as the other backgrounds at night, fading out with the image
     const g = ctx.createLinearGradient(0, bottom - CAST_TOP.FADE, 0, bottom);
     g.addColorStop(0, CAST_TOP.NIGHT); g.addColorStop(1, 'rgba(5,15,45,0)');
-    ctx.fillStyle = CAST_TOP.NIGHT; ctx.fillRect(0, top, W, h - CAST_TOP.FADE);
-    ctx.fillStyle = g; ctx.fillRect(0, bottom - CAST_TOP.FADE, W, CAST_TOP.FADE);
+    ctx.fillStyle = CAST_TOP.NIGHT; ctx.fillRect(0, top, CONFIG.W, h - CAST_TOP.FADE);
+    ctx.fillStyle = g; ctx.fillRect(0, bottom - CAST_TOP.FADE, CONFIG.W, CAST_TOP.FADE);
   }
   castTopDrawn.at = top;
   return true;
@@ -183,13 +184,13 @@ export function renderWorld(ctx, t) {
   drawSea(ctx, top, bottom, run.depth * PX_PER_M, t, run.zone.bg);
   const surfY = screenY(run, 0, lureY);
   if (!castTop(ctx, surfY, run.night) && surfY > -40) {
-    ctx.fillStyle = '#bfefff'; ctx.fillRect(0, 0, W, Math.max(0, surfY));
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(0, surfY - 4, W, 6);
+    ctx.fillStyle = '#bfefff'; ctx.fillRect(0, 0, CONFIG.W, Math.max(0, surfY));
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(0, surfY - 4, CONFIG.W, 6);
   }
   const lineEnd = screenY(run, run.lineLength, lureY);
-  if (lineEnd < H + 40) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, lineEnd, W, H); }
+  if (lineEnd < H + 40) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, lineEnd, CONFIG.W, H); }
   drawSchool(ctx, run, t, false);
-  drawLine(ctx, W / 2, Math.min(surfY, -10), run.lure.x, lureY - 26);
+  drawLine(ctx, CONFIG.W / 2, Math.min(surfY, -10), run.lure.x, lureY - 26);
   run.hooked.forEach((f, i) => {
     const a = Math.sin(t * 5 + i) * 0.5;
     drawFish(ctx, f.sp, run.lure.x + Math.sin(t * 4 + i * 2) * 14, lureY + 26 + (i % 12) * 9, Math.min(f.r, 26) * 0.8, a > 0 ? 1 : -1, t, f.golden ? GOLDEN : undefined);
@@ -200,8 +201,8 @@ export function renderWorld(ctx, t) {
   charmPips(ctx, run);
   drawBolts(ctx);
   if (run.saw) fuelBar(ctx, run);
-  text(ctx, `${Math.floor(run.depth)} m`, W / 2, 50, 40);
-  if (Number.isFinite(run.lineLength)) text(ctx, `line ${run.lineLength} m`, W / 2, 92, 20, '#cfe9ff');
+  text(ctx, `${Math.floor(run.depth)} m`, CONFIG.W / 2, 50, 40);
+  if (Number.isFinite(run.lineLength)) text(ctx, `line ${run.lineLength} m`, CONFIG.W / 2, 92, 20, '#cfe9ff');
 }
 
 const play = {
@@ -249,7 +250,7 @@ G.scenes.cast = {
   render(ctx, t) {
     renderWorld(ctx, t);
     ctx.globalAlpha = Math.max(0, timer / CAST_S); drawArt(ctx, 'fx/splash.png', G.run.lure.x - 90, lureY - 120, 180, 180); ctx.globalAlpha = 1;
-    text(ctx, 'SPLASH!', W / 2, H * 0.55, 64, '#fff');
+    text(ctx, 'SPLASH!', CONFIG.W / 2, H * 0.55, 64, '#fff');
   },
 };
 G.scenes.descent = { ...play, enter() { G.run.mode = 'descent'; sfx.plop(); } };
@@ -259,7 +260,7 @@ G.scenes.turn = {
     moveRun(G.run, dt, getTilt());
     if ((timer -= dt) <= 0) G.go('done');
   },
-  render(ctx, t) { play.render(ctx, t); text(ctx, 'REEL IT IN!', W / 2, H * 0.5, 56, '#ffd166'); },
+  render(ctx, t) { play.render(ctx, t); text(ctx, 'REEL IT IN!', CONFIG.W / 2, H * 0.5, 56, '#ffd166'); },
 };
 G.scenes.ascent = { ...play, enter() { G.run.mode = 'ascent'; sfx.reelStart(); } };
 
@@ -298,7 +299,7 @@ G.scenes.shoot = {
   render(ctx, t) {
     const s = G.shoot, cam = s.cam, z = s.zoom;
     drawSky(ctx, SHOOT.WATER, t, G.run.night, cam, z);
-    ctx.save(); ctx.translate(W / 2, 0); ctx.scale(z, z); ctx.translate(-W / 2, -cam); // sky camera: pan + zoom
+    ctx.save(); ctx.translate(CONFIG.W / 2, 0); ctx.scale(z, z); ctx.translate(-CONFIG.W / 2, -cam); // sky camera: pan + zoom
     if ((SHOOT.WATER + 4 - cam) * z < H + 140) {
       drawBoat(ctx, s.x0, SHOOT.WATER + 4, t, G.slot.color, wearDrawer(G.slot.equip),
         hasBuddy(G.slot) ? (c) => drawFish(c, BY_ID.get(47), -44, -40, 16, -1, t) : null);
@@ -326,8 +327,8 @@ G.scenes.shoot = {
     drawFx(ctx);
     if (s.pointer.down) drawCrosshair(ctx, s.pointer.x, s.pointer.y, gun().spread, true);
     if (cam > -200) {
-      text(ctx, 'TAP & HOLD TO SHOOT!', W / 2, 60, 30, '#fff');
-      text(ctx, gun().name, W / 2, 100, 20, '#cfe9ff');
+      text(ctx, 'TAP & HOLD TO SHOOT!', CONFIG.W / 2, 60, 30, '#fff');
+      text(ctx, gun().name, CONFIG.W / 2, 100, 20, '#cfe9ff');
     }
   },
 };

@@ -1,4 +1,4 @@
-import { CONFIG } from './config.js';
+import { CONFIG, widthFor } from './config.js';
 import { input, step as stepInput, routeDown, routeMove, routeUp, releaseAll, bindKeys } from './input.js';
 import { ui, beginFrame, hitButton } from './ui.js';
 import { G } from './game.js';
@@ -11,7 +11,7 @@ import './play.js';
 import './screens.js';
 import './dock.js';
 
-const { W, H, FIXED_DT, MAX_STEPS } = CONFIG;
+const { H, FIXED_DT, MAX_STEPS } = CONFIG; // W is live (v1.4.2): fit() sets CONFIG.W
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const rotate = document.getElementById('rotate');
@@ -21,13 +21,14 @@ function fit() {
   const cs = getComputedStyle(document.body), px = (k) => parseFloat(cs[k]) || 0;
   const vw = innerWidth - px('paddingLeft') - px('paddingRight'), vh = innerHeight - px('paddingTop') - px('paddingBottom');
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  scale = Math.min(vw / W, vh / H);
-  canvas.style.width = W * scale + 'px';
+  CONFIG.W = widthFor(vw / vh);
+  scale = Math.min(vw / CONFIG.W, vh / H);
+  canvas.style.width = CONFIG.W * scale + 'px';
   canvas.style.height = H * scale + 'px';
-  canvas.width = Math.round(W * scale * dpr);
+  canvas.width = Math.round(CONFIG.W * scale * dpr);
   canvas.height = Math.round(H * scale * dpr);
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
-  rotate.style.width = Math.max(0, (vw - W * scale) / 2) + 'px';
+  rotate.style.width = Math.max(0, (vw - CONFIG.W * scale) / 2) + 'px';
   placeCodeUI();
 }
 addEventListener('resize', fit);
@@ -41,7 +42,7 @@ const sceneNow = () => G.scenes[G.phase];
 const pointers = new Map();
 const toLogical = (e) => {
   const r = canvas.getBoundingClientRect();
-  return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
+  return { x: ((e.clientX - r.left) / r.width) * CONFIG.W, y: ((e.clientY - r.top) / r.height) * H };
 };
 canvas.addEventListener('pointerdown', (e) => {
   e.preventDefault();
@@ -110,7 +111,7 @@ requestAnimationFrame(frame);
 
 // test hook for the smoke test
 window.__wf = {
-  W, H, get scale() { return scale; }, G, ui, freeze: false, audioState, musicNow, sfxStats, artStats, frameMs,
+  get W() { return CONFIG.W; }, H, get scale() { return scale; }, G, ui, freeze: false, audioState, musicNow, sfxStats, artStats, frameMs,
   lum() { // mean luminance of the canvas, 0..255
     const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let s = 0; for (let i = 0; i < d.length; i += 16) s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];

@@ -1,7 +1,7 @@
 // Menu-style screens: shop, payout, ending, Fish book, kid slots. The dock + title scene live in dock.js.
 import { CONFIG } from './config.js';
 import { G } from './game.js';
-import { addButton } from './ui.js';
+import { addButton, inPanel, PANEL_W } from './ui.js';
 import { drawSea, text, rr, drawBoat } from './draw.js';
 import { wearDrawer } from './icons.js';
 import { ZONES } from './data/zones.js';
@@ -19,7 +19,10 @@ import { FINAL_BOSS } from './data/zones.js';
 import { art } from './art.js';
 import { codeUI, openExport, openImport, pickSlot } from './codeui.js';
 
-const { W, H } = CONFIG;
+// v1.4.2: every screen here is a text panel. It keeps its designed PANEL_W (540) layout, centred in the live
+// canvas width (inPanel); only its sea background spans the full CONFIG.W.
+const W = PANEL_W;
+const centred = (top, bottom, body) => function (ctx, t) { drawSea(ctx, top, bottom, 0, t); inPanel(ctx, () => body.call(this, ctx, t)); };
 
 export function bigButton(ctx, x, y, w, h, label, onTap, opts = {}) {
   const b = addButton({ x, y, w, h, onTap, disabled: opts.disabled, label, silent: opts.silent });
@@ -54,9 +57,8 @@ export const shopLines = (it, why) => (it.ability ? [abilityText(it.ability), wh
 
 G.scenes.shop = {
   steers: false,
-  render(ctx, t) {
+  render: centred([140, 200, 160], [30, 80, 70], function (ctx, t) {
     const slot = G.slot;
-    drawSea(ctx, [140, 200, 160], [30, 80, 70], 0, t);
     text(ctx, 'SHOP', W / 2, 60, 48);
     text(ctx, money(slot.cash), W / 2, 112, 30, '#ffe066');
     bigButton(ctx, 16, 28, 110, 70, 'BACK', () => { sfx.close(); G.go('back'); }, { color: '#e9ecef', size: 24, silent: true });
@@ -89,7 +91,7 @@ G.scenes.shop = {
       bigButton(ctx, W - 170, 860, 140, 80, '▶', () => { shopState.page = (shopState.page + 1) % pages; }, { color: '#cfe9ff' });
       text(ctx, `${shopState.page + 1} / ${pages}`, W / 2, 900, 26);
     }
-  },
+  }),
 };
 
 let tally = 0, after = 0;
@@ -111,9 +113,8 @@ G.scenes.payout = {
     if (at(0.6) && p.newSpecies.length) sfx.newSpecies();
     if (at(1.3) && p.opened.length) sfx.zoneUnlock();
   },
-  render(ctx, t) {
+  render: centred([120, 210, 245], [20, 90, 140], function (ctx, t) {
     const p = G.payout, h = p.hero;
-    drawSea(ctx, [120, 210, 245], [20, 90, 140], 0, t);
     text(ctx, p.rows.length ? 'NICE CATCH!' : 'No fish this time!', W / 2, h ? 52 : 90, h ? 44 : 48);
     payoutDrawn.hero = null; payoutDrawn.rows = [];
     if (h) { // hero: the run's most valuable fish, big, popping in
@@ -153,7 +154,7 @@ G.scenes.payout = {
       if (p.bossLanded) ending.story = p.story;
       G.go(p.bossLanded ? 'bossLanded' : 'done');
     });
-  },
+  }),
 };
 
 // ---- ending: an original, gentle 3-panel comic ----
@@ -218,15 +219,14 @@ G.scenes.ending = {
   enter() { comic = 0; },
   update(dt) { comic += dt; },
   pointerDown() { sfx.page(); if (comic < 5) comic = Math.ceil((comic + 0.01) / 1.6) * 1.6; else G.go('done'); return true; },
-  render(ctx, t) {
-    drawSea(ctx, [255, 214, 165], [255, 158, 170], 0, t);
+  render: centred([255, 214, 165], [255, 158, 170], function (ctx, t) {
     panel(ctx, 0, 30, t); panel(ctx, 1, 300, t); panel(ctx, 2, 570, t);
     if (comic > 5) {
       const [a, b] = STORIES[ending.story === 43 ? 43 : FINAL_BOSS].end;
       text(ctx, a, W / 2, 860, 40, '#fff');
       text(ctx, b, W / 2, 910, 20, '#fff');
     }
-  },
+  }),
 };
 
 // ---- Fish book (Fish-o-pedia) ----
@@ -246,9 +246,8 @@ export function hint(sp) {
 G.scenes.dex = {
   steers: false,
   enter() { dexState.pick = null; },
-  render(ctx, t) {
+  render: centred([110, 190, 210], [20, 70, 100], function (ctx, t) {
     const slot = G.slot, found = Object.keys(slot.dex).length;
-    drawSea(ctx, [110, 190, 210], [20, 70, 100], 0, t);
     bigButton(ctx, 16, 28, 110, 70, 'BACK', () => G.go('back'), { color: '#e9ecef', size: 24 });
     text(ctx, 'FISH BOOK', W / 2 + 40, 52, 40);
     text(ctx, `${found} / ${SPECIES.length} found`, W / 2 + 40, 100, 24, '#ffe066');
@@ -291,7 +290,7 @@ G.scenes.dex = {
     bigButton(ctx, 30, 860, 140, 80, '◀', () => { sfx.page(); dexState.page = (dexState.page + pages - 1) % pages; dexState.pick = null; }, { color: '#cfe9ff', silent: true });
     bigButton(ctx, W - 170, 860, 140, 80, '▶', () => { sfx.page(); dexState.page = (dexState.page + 1) % pages; dexState.pick = null; }, { color: '#cfe9ff', silent: true });
     text(ctx, `${dexState.page + 1} / ${pages}`, W / 2, 900, 26);
-  },
+  }),
 };
 // Gold star + count: a species' golden catches (v1.4).
 function goldStar(ctx, x, y, n) {
@@ -306,9 +305,8 @@ const cycle = (list, v, d = 1) => list[(list.indexOf(v) + d + list.length) % lis
 export const SLOT_CARD = { Y: 116, STEP: 240, H: 228 }; // v1.3: a touch shorter, to fit the Import code button
 G.scenes.slots = {
   steers: false,
-  render(ctx, t) {
+  render: centred([120, 210, 245], [20, 90, 140], function (ctx, t) {
     const picking = codeUI.mode === 'pick';
-    drawSea(ctx, [120, 210, 245], [20, 90, 140], 0, t);
     text(ctx, picking ? 'Pick a slot' : "Who's fishing?", W / 2, 62, 46);
     G.data.slots.forEach((slot, i) => {
       const y = SLOT_CARD.Y + i * SLOT_CARD.STEP, view = slot || freshSlot(i);
@@ -328,5 +326,5 @@ G.scenes.slots = {
       if (slot) bigButton(ctx, 408, y + 148, 100, 64, 'Share code', () => { if (free()) { sfx.open(); openExport(i); } }, { color: '#bde0fe', size: 16, silent: true });
     });
     if (!picking) bigButton(ctx, 100, 846, 340, 90, 'Import code', () => { if (!codeUI.mode) { sfx.open(); openImport(); } }, { color: '#8ac926', size: 32, silent: true });
-  },
+  }),
 };

@@ -3,6 +3,8 @@
 import { G } from './game.js';
 import { sfx } from './audio.js';
 import { FONT } from './draw.js';
+import { CONFIG } from './config.js';
+import { panelX } from './ui.js';
 import { encodeSlot, newImport, loadCode, tapSlot } from './savecode.js';
 
 export const BAD_CODE = "That code doesn't work — check it was copied fully.";
@@ -51,13 +53,16 @@ function build() {
   place();
 }
 
-// Keeps the panel exactly over the canvas (called from main.js fit()).
+// Keeps the panel exactly over the canvas (called from main.js fit()). v1.4.2: the layer spans the live width
+// (the dim covers it all) and the 540-px box stays centred, like the canvas panels.
 export function place() {
   const c = document.getElementById('game');
   if (!root || !c) return;
   const r = c.getBoundingClientRect();
   root.style.left = r.left + 'px'; root.style.top = r.top + 'px';
-  root.style.transform = `scale(${r.width / 540})`;
+  root.style.width = CONFIG.W + 'px';
+  root.querySelector('.box').style.left = panelX() + 24 + 'px';
+  root.style.transform = `scale(${r.width / CONFIG.W})`;
 }
 
 function say(text, bad = false) { el.msg.textContent = text; el.msg.classList.toggle('bad', bad); }

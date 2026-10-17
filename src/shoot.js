@@ -3,17 +3,17 @@
 import { CONFIG } from './config.js';
 import { GOLD } from './fish.js';
 
-const { W, H } = CONFIG;
+const { H } = CONFIG; // W is live (v1.4.2): always CONFIG.W
 // VY_MIN/VY_MAX are the v1.0 base speeds; CONFIG.LAUNCH_VY_MULT scales them. Gravity is CONFIG.GRAVITY.
 export const SHOOT = { VY_MIN: 1100, VY_MAX: 1450, VX: 260, STAGGER: 0.06, WATER: 780, HIT_PAD: 48, CAM_TAU: 0.25,
   ZOOM_MIN: 0.5, FRAME_TOP: 80, FRAME_LOW: 200, EDGE: 40 }; // sky camera framing, world/screen px
 export const gunRate = (gun) => gun.rate * CONFIG.GUN_RATE_MULT;
 
 // gear: { spring, antigrav, fallSlow (gravity ×), launchMul (vy ×) } — all multiply together.
-export function createShoot(hooked, gear = {}, x0 = W / 2) {
+export function createShoot(hooked, gear = {}, x0 = CONFIG.W / 2) {
   return {
     queue: [...hooked], air: [], landed: [], lost: [], x0,
-    t: 0, launchIn: 0, cooldown: 0, pointer: { x: W / 2, y: 300, down: false }, shots: [], fired: 0, hits: 0,
+    t: 0, launchIn: 0, cooldown: 0, pointer: { x: CONFIG.W / 2, y: 300, down: false }, shots: [], fired: 0, hits: 0,
     cam: 0,  // world y of the top of the view (≤ 0: the sky camera pans up to follow the fish)
     zoom: 1, // view scale, ZOOM_MIN..1 (< 1: zoomed out to fit a tall spread of fish)
     g: CONFIG.GRAVITY * (gear.antigrav ? 0.55 : 1) * (gear.fallSlow ?? 1),
@@ -22,8 +22,8 @@ export function createShoot(hooked, gear = {}, x0 = W / 2) {
 }
 
 // World ↔ screen for the sky camera. The zoom is about the horizontal centre and the view top.
-export const toScreen = (s, x, y) => ({ x: (x - W / 2) * s.zoom + W / 2, y: (y - s.cam) * s.zoom });
-export const toWorld = (s, x, y) => ({ x: (x - W / 2) / s.zoom + W / 2, y: y / s.zoom + s.cam });
+export const toScreen = (s, x, y) => ({ x: (x - CONFIG.W / 2) * s.zoom + CONFIG.W / 2, y: (y - s.cam) * s.zoom });
+export const toWorld = (s, x, y) => ({ x: (x - CONFIG.W / 2) / s.zoom + CONFIG.W / 2, y: y / s.zoom + s.cam });
 export const lowestFish = (s) => s.air.reduce((lo, f) => (!lo || f.y > lo.y ? f : lo), null);
 
 // Sky camera target: frame every airborne fish (zooming out to ZOOM_MIN for a tall spread); when they
@@ -67,7 +67,7 @@ export function flyFish(s, dt, rng = Math.random) {
     if (f.golden) { f.wob += dt * 7; f.x += Math.cos(f.wob) * GOLD.WOBBLE * 7 * dt; } // side-to-side ±GOLD.WOBBLE px
     f.hit = Math.max(0, f.hit - dt);
     if (f.x < f.r) { f.x = f.r; f.vx = Math.abs(f.vx); }
-    if (f.x > W - f.r) { f.x = W - f.r; f.vx = -Math.abs(f.vx); }
+    if (f.x > CONFIG.W - f.r) { f.x = CONFIG.W - f.r; f.vx = -Math.abs(f.vx); }
     if (f.vy > 0 && f.y > SHOOT.WATER) { s.air.splice(s.air.indexOf(f), 1); s.lost.push(f); }
   }
   moveCam(s, dt);

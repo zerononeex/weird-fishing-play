@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 
 export const PHYS = {
-  MAX_VX: 380, TAU: 0.10, X_MIN: 24, X_MAX: 516, LURE_R: 14,
+  MAX_VX: 380, TAU: 0.10, X_MIN: 24, get X_MAX() { return CONFIG.W - 24; }, LURE_R: 14, // v1.4.2: steer across the live width
   SINK: 14, REEL: 20,            // m/s [TUNE]
   LURE_Y_DESCENT: 0.3, LURE_Y_ASCENT: 0.7, // lure screen position (fraction of H)
 };

@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { SPECIES, BY_ID } from './data/fish.js';
 
-const { W, PX_PER_M } = CONFIG;
+const { PX_PER_M } = CONFIG; // W is live (v1.4.2): always CONFIG.W
 export const WEIGHT = { c: 10, u: 4, r: 1, v: 0.3 };
 export const CHUNK = 10;      // metres per spawn chunk
 export const AHEAD = 150;     // metres spawned ahead of the lure (~1.5 screens)
@@ -82,9 +82,9 @@ export function spawnTo(run, sp, upto, limit = run.lineLength) {
       if (!s) { sp.acc -= 1; continue; }
       const dir = sp.rng() < 0.5 ? -1 : 1;
       const n = s.beh === 'school' ? 3 + Math.floor(sp.rng() * 4) : 1;
-      const x0 = 40 + sp.rng() * (W - 80);
+      const x0 = 40 + sp.rng() * (CONFIG.W - 80);
       for (let i = 0; i < n; i++) {
-        const f = makeFish(s, Math.max(s.r, Math.min(W - s.r, x0 + i * 30 * dir)), d + (i % 2) * 2, dir, i === 0 && takeGold(sp, d, s));
+        const f = makeFish(s, Math.max(s.r, Math.min(CONFIG.W - s.r, x0 + i * 30 * dir)), d + (i % 2) * 2, dir, i === 0 && takeGold(sp, d, s));
         f.school = n > 1 ? d0 : 0;
         f.t = sp.rng() * 10;
         run.fish.push(f);
@@ -99,7 +99,7 @@ const SPEED = { drift: 45, glow: 40, school: 70, bob: 15 };
 
 function wall(f) {
   if (f.x < f.r) { f.x = f.r; f.dir = 1; }
-  if (f.x > W - f.r) { f.x = W - f.r; f.dir = -1; }
+  if (f.x > CONFIG.W - f.r) { f.x = CONFIG.W - f.r; f.dir = -1; }
 }
 
 // Moves fish near the lure (within ~1.5 screens) according to their behaviour.
@@ -120,7 +120,7 @@ function moveOne(run, f, dt) {
       if (Math.abs(dx) < 160 && Math.abs(dy) < 160) {
         f.dir = dx >= 0 ? 1 : -1;
         f.x += f.dir * 220 * dt;
-        if (f.x <= f.r || f.x >= W - f.r) f.x = Math.max(f.r, Math.min(W - f.r, f.x)); // cornered
+        if (f.x <= f.r || f.x >= CONFIG.W - f.r) f.x = Math.max(f.r, Math.min(CONFIG.W - f.r, f.x)); // cornered
         return;
       }
       f.x += f.dir * SPEED.drift * dt; break;
@@ -131,7 +131,7 @@ function moveOne(run, f, dt) {
       return;
     }
     case 'bob': f.d = f.home + Math.sin(f.t * 2) * 0.6; f.x += f.dir * SPEED.bob * dt; break;
-    case 'boss': f.x = W / 2 + Math.sin(f.t * 0.5) * 80; return;
+    case 'boss': f.x = CONFIG.W / 2 + Math.sin(f.t * 0.5) * 80; return;
     default: f.x += f.dir * (SPEED[f.sp.beh] || 45) * dt;
   }
   wall(f);
@@ -166,7 +166,7 @@ const midBand = (sp) => (sp.dMin + sp.dMax) / 2;
 export function placeGuaranteed(run, zone, allowed, rng = Math.random) {
   for (const sp of GEARED) {
     if (sp.zone !== zone.id || sp.cond.some((c) => c.startsWith('after:')) || !allowed(sp)) continue;
-    if (midBand(sp) < run.lineLength) run.fish.push(makeFish(sp, 60 + rng() * (W - 120), midBand(sp)));
+    if (midBand(sp) < run.lineLength) run.fish.push(makeFish(sp, 60 + rng() * (CONFIG.W - 120), midBand(sp)));
   }
 }
 
@@ -177,6 +177,6 @@ export function summon(run, zone, allowed) {
     if (sp.zone !== zone.id || run.summoned.has(sp.id) || !sp.cond.some((c) => c.startsWith('after:'))) continue;
     if (!allowed(sp)) continue;
     run.summoned.add(sp.id);
-    if (midBand(sp) > run.depth && midBand(sp) < run.lineLength) run.fish.push(makeFish(sp, W / 2, midBand(sp)));
+    if (midBand(sp) > run.depth && midBand(sp) < run.lineLength) run.fish.push(makeFish(sp, CONFIG.W / 2, midBand(sp)));
   }
 }
