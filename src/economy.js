@@ -122,7 +122,7 @@ export function gearOf(slot, zoneId) {
       charm: charmOf(slot)?.id || null, charges: charm.charges || 0, zapAll: !!charm.all, zapBonus: charm.bonus || 1, magnet: charm.magnet || 0,
       saw: o('chainsaw'), fuelMax: o('chainsaw') ? (2.5 + (o('fuel1') ? 2 : 0) + (o('fuel2') ? 5 : 0)) * wear.fuelMul : 0,
       turbo: o('turbo'), float: o('float'), gizmo: o('gizmo'),
-      lamp: o('biglamp') ? 2 : o('lamp') ? 1 : 0, spring: o('spring'), antigrav: o('antigrav'), knife: o('knife'),
+      lamp: o('biglamp') ? 2 : o('lamp') ? 1 : 0, startItem: start ? start.id : null, spring: o('spring'), antigrav: o('antigrav'), knife: o('knife'),
       fallSlow: wear.fallSlow, launchMul: wear.launchMul,
     },
   };

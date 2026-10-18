@@ -29,6 +29,7 @@ export function createRun({ lineLength = 50, startDepth = 0 } = {}) {
     charm: null, charges: 0,     // Hook Charm: zaps left this dive (refilled every cast, GAME_SPEC §10.E)
     zapAll: false, zapBonus: 1,  // Storm Coil: each zap hits every visible fish · Lucky: zapped fish pay ×bonus
     magnet: 0,                   // Magnet Charm: ascent pull radius in px (0 = none)
+    lamp: 0, startItem: null,    // Lamp level (0/1/2) · equipped start-depth item id (shown on the line, v1.4.4)
     saw: false, fuelMax: 0, fuel: 0, sawing: false, turbo: false, float: false, gizmo: false, gizmoIn: 0,
     touched: new Set(),          // species ids touched on the descent (for summon chains)
     fx: [],                      // events for sound/particles: { type, x, d }
@@ -48,6 +49,21 @@ export function moveRun(run, dt, tilt) {
     if (run.depth <= 1e-9) { run.depth = 0; return 'surface'; }
   }
   return null;
+}
+
+// v1.4.4 (GAME_SPEC §17): the equipped gear shown on the line this frame — pure layout, drawn by play.js.
+// charm: icon bubble beside the hook (flips left near the right wall) with charge pips only if it has charges.
+// line: lamp just above the hook, then the start-depth item above it, each sitting on the line and swaying with it.
+export const GEAR = { ICON: 40, LINE_END: 26, FIRST: 52, STACK: 44, CHARM_DX: 64, CHARM_DY: -6, CHARM_R: 24, FLIP: 120, PIP_DY: 28, SWAY: 0.4 };
+export function lineGear(run, lureY, lineTop = -10) {
+  const x1 = run.lure.x, y1 = lureY - GEAR.LINE_END, x0 = CONFIG.W / 2;
+  const onLine = (y) => (y1 - lineTop > 1 ? x1 + ((x0 - x1) * (y1 - y)) / (y1 - lineTop) : x1);
+  const sway = Math.max(-GEAR.SWAY, Math.min(GEAR.SWAY, (-run.lure.vx / PHYS.MAX_VX) * GEAR.SWAY)) || 0;
+  const ids = [run.lamp >= 2 ? 'biglamp' : run.lamp >= 1 ? 'lamp' : null, run.startItem || null].filter(Boolean);
+  const line = ids.map((id, i) => { const y = lureY - GEAR.FIRST - i * GEAR.STACK; return { id, x: onLine(y), y, sway }; });
+  const charm = run.charm ? { id: run.charm, x: x1 + (x1 > CONFIG.W - GEAR.FLIP ? -GEAR.CHARM_DX : GEAR.CHARM_DX), y: lureY + GEAR.CHARM_DY,
+    pips: run.chargesMax || 0, charges: run.charges } : null;
+  return { charm, line };
 }
 
 // Screen y (logical px) of a world depth, with the lure pinned at `lureY`.

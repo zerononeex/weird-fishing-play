@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import { G } from './game.js';
 import { getTilt } from './input.js';
 import { arrowButtons, sawButton } from './ui.js';
-import { createRun, moveRun, contact, sawStep, magnetStep, spotGolden, screenY, PHYS, reelRiseMult } from './sim.js';
+import { createRun, moveRun, contact, sawStep, magnetStep, spotGolden, screenY, PHYS, reelRiseMult, lineGear, GEAR } from './sim.js';
 import { reelSpeedOf } from './save.js';
 import { addButton } from './ui.js';
 import { createSpawner, spawnTo, moveFish, makeFish, makeAllowed, placeGuaranteed, summon, AHEAD } from './fish.js';
@@ -130,18 +130,29 @@ function stepBolts(dt) {
   for (let i = bolts.length - 1; i >= 0; i--) if ((bolts[i].life -= dt) <= 0) bolts.splice(i, 1);
 }
 
-// Equipped charm icon + charge pips next to the hook (descent only).
-function charmPips(ctx, run) {
-  if (!run.charm || run.mode !== 'descent' || !run.chargesMax) return;
-  const x = run.lure.x + (run.lure.x > CONFIG.W - 120 ? -64 : 64), y = lureY;
-  ctx.fillStyle = 'rgba(0,30,50,0.45)'; ctx.beginPath(); ctx.arc(x, y - 6, 24, 0, Math.PI * 2); ctx.fill();
-  ctx.save(); ctx.translate(x, y - 6); ctx.scale(0.75, 0.75); drawItemIcon(ctx, ITEM[run.charm], 0, 0); ctx.restore();
-  for (let i = 0; i < run.chargesMax; i++) {
-    const px = x - (run.chargesMax - 1) * 9 + i * 18;
-    ctx.fillStyle = i < run.charges ? '#ffee32' : 'rgba(255,255,255,0.25)';
-    ctx.beginPath(); ctx.arc(px, y + 28, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,30,50,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+// v1.4.4: everything equipped is visible on the line in both directions (GAME_SPEC §17): the charm bubble beside the
+// hook (charge pips only for charms with charges), the lamp just above the hook, the start-depth item above that.
+// Drawn after the darkness so the gear shows inside the lamp's glow. lineGearDrawn: what the last frame drew (smoke).
+export const lineGearDrawn = { charm: null, line: [] };
+function drawGear(ctx, run, lineTop) {
+  const g = lineGear(run, lureY, lineTop), k = GEAR.ICON / 64;
+  for (const it of g.line) {   // hung from its top on the line, swinging with the lure's sideways speed
+    ctx.save(); ctx.translate(it.x, it.y - GEAR.ICON / 2); ctx.rotate(it.sway);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(0, 4); ctx.stroke();
+    ctx.translate(0, GEAR.ICON / 2); ctx.scale(k, k); drawItemIcon(ctx, ITEM[it.id], 0, 0); ctx.restore();
   }
+  const c = g.charm;
+  if (c) {
+    ctx.fillStyle = 'rgba(0,30,50,0.45)'; ctx.beginPath(); ctx.arc(c.x, c.y, GEAR.CHARM_R, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(0.75, 0.75); drawItemIcon(ctx, ITEM[c.id], 0, 0); ctx.restore();
+    for (let i = 0; i < c.pips; i++) {
+      const px = c.x - (c.pips - 1) * 9 + i * 18;
+      ctx.fillStyle = i < c.charges ? '#ffee32' : 'rgba(255,255,255,0.25)';
+      ctx.beginPath(); ctx.arc(px, lureY + GEAR.PIP_DY, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,30,50,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+  lineGearDrawn.charm = c; lineGearDrawn.line = g.line;
 }
 
 const fishY = (run, f) => screenY(run, f.d, lureY);
@@ -199,7 +210,7 @@ export function renderWorld(ctx, t) {
   drawLure(ctx, run.lure.x, lureY, t, run.sawing);
   darkness(ctx, run);
   drawSchool(ctx, run, t, true);
-  charmPips(ctx, run);
+  drawGear(ctx, run, Math.min(surfY, -10));
   drawBolts(ctx);
   if (run.saw) fuelBar(ctx, run);
   text(ctx, `${Math.floor(run.depth)} m`, CONFIG.W / 2, 50, 40);
