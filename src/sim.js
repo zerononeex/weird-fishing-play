@@ -7,6 +7,9 @@ export const PHYS = {
   LURE_Y_DESCENT: 0.3, LURE_Y_ASCENT: 0.7, // lure screen position (fraction of H)
 };
 
+// v1.4.3: ascent rise multiplier for a Reel setting of 1-4 (1× = 1.5, the v1.2 speed; 2× = 3.0; 3× = 4.5; 4× = 6.0).
+export const reelRiseMult = (speed) => CONFIG.REEL_RISE_STEP * speed;
+
 export function createLure() { return { x: CONFIG.W / 2, vx: 0 }; }
 
 export function steer(lure, tilt, dt, mul = 1) {
@@ -22,6 +25,7 @@ export function createRun({ lineLength = 50, startDepth = 0 } = {}) {
     mode: 'descent', depth: startDepth, maxReached: startDepth, lineLength,
     lure: createLure(), fish: [], hooked: [], landed: [], t: 0,
     sinkMul: 1, reelMul: 1,
+    riseMult: reelRiseMult(2),   // set from the active kid's Reel setting when the ascent starts (play.js)
     charm: null, charges: 0,     // Hook Charm: zaps left this dive (refilled every cast, GAME_SPEC §10.E)
     zapAll: false, zapBonus: 1,  // Storm Coil: each zap hits every visible fish · Lucky: zapped fish pay ×bonus
     magnet: 0,                   // Magnet Charm: ascent pull radius in px (0 = none)
@@ -40,7 +44,7 @@ export function moveRun(run, dt, tilt) {
     run.maxReached = Math.max(run.maxReached, Math.min(run.depth, run.lineLength));
     if (run.depth >= run.lineLength - 1e-9) { run.depth = run.lineLength; return 'maxDepth'; }
   } else if (run.mode === 'ascent') {
-    run.depth -= PHYS.REEL * CONFIG.REEL_RISE_MULT * run.reelMul * dt;
+    run.depth -= PHYS.REEL * run.riseMult * run.reelMul * dt;
     if (run.depth <= 1e-9) { run.depth = 0; return 'surface'; }
   }
   return null;

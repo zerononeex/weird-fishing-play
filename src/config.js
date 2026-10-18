@@ -8,7 +8,7 @@ export const CONFIG = {
   GRAVITY: 420,              // px/s² in the air (v1.0: 1400, v1.1: 560, v1.1.1: 280) — airtime ≈ 5.8–7.6 s [TUNE]
   LAUNCH_VY_MULT: 1.1,       // launch vy × this (−1210..−1595 px/s) — apex ≈ 3× v1.0 [TUNE]
   GUN_RATE_MULT: 2.25,       // every gun's data rate × this (v1.1: 1.5) [TUNE]
-  REEL_RISE_MULT: 3.75,      // ascent rise speed × this (v1.2: 1.5, v1.4.2: 3.75 — owner playtest, 2.5× faster) [TUNE]
+  REEL_RISE_STEP: 1.5,       // v1.4.3: ascent rise speed × (this × the kid's Reel setting 1-4); replaces REEL_RISE_MULT (v1.2: 1.5, v1.4.2: 3.75) [TUNE]
   ASCENT_STEER_MULT: 1.5,    // horizontal lure speed × this during ASCENT only (v1.2) [TUNE]
 };
 

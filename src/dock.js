@@ -15,6 +15,7 @@ import { CHARMS, ITEM } from './data/shop.js';
 import { zoneUnlocked, lockReason, refreshUnlocks, gearOf, grantGifts, owns, equip, charmOf } from './economy.js';
 import { hasBuddy } from './play.js';
 import { sfx } from './audio.js';
+import { reelSpeedOf, nextReelSpeed } from './save.js';
 
 const { H } = CONFIG; // W is live (v1.4.2): always CONFIG.W
 // v1.2: WATER 330 -> 394 (boat + fisher 64 px lower, clear of the bigger HUD); BUOY_Y follows.
@@ -105,6 +106,14 @@ const GLYPH = {
   night(c) { c.fillStyle = '#fff3b0'; c.beginPath(); c.arc(0, 0, 15, 0, TAU); c.fill(); c.fillStyle = '#1d3557'; c.beginPath(); c.arc(7, -5, 13, 0, TAU); c.fill(); },
   music(c) { c.fillStyle = '#c77dff'; c.beginPath(); c.ellipse(-8, 10, 7, 5, -0.4, 0, TAU); c.ellipse(10, 6, 7, 5, -0.4, 0, TAU); c.fill(); c.fillRect(-3, -16, 4, 26); c.fillRect(15, -20, 4, 26); c.fillRect(-3, -18, 22, 6); },
   sound(c) { c.fillStyle = '#4cc9f0'; c.beginPath(); c.moveTo(-16, -6); c.lineTo(-8, -6); c.lineTo(2, -15); c.lineTo(2, 15); c.lineTo(-8, 6); c.lineTo(-16, 6); c.fill(); c.strokeStyle = '#4cc9f0'; c.lineWidth = 3; c.beginPath(); c.arc(4, 0, 9, -0.9, 0.9); c.stroke(); c.beginPath(); c.arc(4, 0, 15, -0.9, 0.9); c.stroke(); },
+  reel(c) { // v1.4.3: a fishing reel — spool, handle and line
+    c.fillStyle = '#457b9d'; c.beginPath(); c.arc(-2, 2, 15, 0, TAU); c.fill();
+    c.fillStyle = '#a8dadc'; c.beginPath(); c.arc(-2, 2, 9, 0, TAU); c.fill();
+    c.fillStyle = '#1d3557'; c.beginPath(); c.arc(-2, 2, 3.5, 0, TAU); c.fill();
+    c.strokeStyle = '#1d3557'; c.lineWidth = 4; c.beginPath(); c.moveTo(-2, 2); c.lineTo(14, 12); c.stroke();
+    c.fillStyle = '#ffd166'; c.beginPath(); c.arc(15, 13, 5, 0, TAU); c.fill();
+    c.strokeStyle = '#e9f5db'; c.lineWidth = 2; c.beginPath(); c.moveTo(-2, -13); c.quadraticCurveTo(12, -20, 18, -10); c.stroke();
+  },
   kids(c) { for (const [x, col] of [[-10, '#ff6b9a'], [10, '#4cc9f0'], [0, '#ffd166']]) { c.fillStyle = col; c.beginPath(); c.arc(x, x ? 4 : -4, 10, 0, TAU); c.fill(); } },
 };
 
@@ -127,6 +136,15 @@ function kidFace(ctx, slotIndex, color, x, y, r) {
   ctx.fillStyle = '#ffd7b5'; ctx.beginPath(); ctx.arc(x, y + 3, r * 0.6, 0, TAU); ctx.fill();
   ctx.fillStyle = '#1b1b1b'; ctx.beginPath(); ctx.arc(x - 6, y, 2.5, 0, TAU); ctx.arc(x + 6, y, 2.5, 0, TAU); ctx.fill();
   ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y + 5, 6, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+}
+
+// v1.4.3 Reel button: the 6-button row has no room for a 7th at 540, and the zone-info line fills the bottom, so it
+// sits in the sky at the left edge (same 80×88 HUD button), under the bar and below the first-cast hint bubble.
+export const REEL_BTN = { X: 16, Y: 324 };
+function reelButton(ctx) {
+  const st = G.slot.settings, n = reelSpeedOf(G.slot);
+  hudButton(ctx, REEL_BTN.X, REEL_BTN.Y, HUD.ROW_W, HUD.ROW_H, 'REEL', 'reel', () => { st.reelSpeed = nextReelSpeed(n); G.persist(); },
+    { caption: `Reel ${n}×` });
 }
 
 // v1.2: the bar is ~1.25x bigger (owner: too small for the kids). Every button is >= 64 px.
@@ -256,6 +274,7 @@ G.scenes.dock = {
       ctx.restore();
     }
     buoys(ctx, t);
+    reelButton(ctx);
     hud(ctx);
     if (dock.panel === 'charm') charmPanel(ctx);
   },

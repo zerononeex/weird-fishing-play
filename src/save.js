@@ -8,9 +8,16 @@ export function freshSlot(i = 0) {
     name: PRESET_NAMES[i % PRESET_NAMES.length], color: PRESET_COLORS[i % PRESET_COLORS.length], cash: 0,
     owned: ['line0', 'pistol'], equip: { gun: 'pistol', hat: null, outfit: null, start: null, charm: null },
     zonesUnlocked: [1], bestDepth: {}, dex: {}, flags: { bossBeaten: false, bosses: [], hasCast: false },
-    settings: { muted: false, musicMuted: false, night: false }, zone: 1, seas: SEAS,
+    settings: { muted: false, musicMuted: false, night: false, reelSpeed: REEL_DEFAULT }, zone: 1, seas: SEAS,
   };
 }
+
+// v1.4.3 Reel setting (same v2 key, additive): settings.reelSpeed is 1-4, default 2. Slots and WF1 codes written
+// before it, or carrying anything else, open at the default.
+export const REEL_SPEEDS = [1, 2, 3, 4];
+export const REEL_DEFAULT = 2;
+export const reelSpeedOf = (slot) => (REEL_SPEEDS.includes(slot?.settings?.reelSpeed) ? slot.settings.reelSpeed : REEL_DEFAULT);
+export const nextReelSpeed = (n) => REEL_SPEEDS[(REEL_SPEEDS.indexOf(n) + 1) % REEL_SPEEDS.length];
 
 // v1.4 "Nine Seas" (same v2 key, additive): the Whirlpool moved from zone id 4 to 9 (zones 4-8 are new), and
 // flags.bossBeaten now means the FINAL boss (Dragon's Deep). A slot written before v1.4 (no `seas` mark) gets its
@@ -46,7 +53,7 @@ function normalizeSlot(slot, i) {
   slot = slotToSeas(slot);
   const f = freshSlot(i);
   return { ...f, ...slot, equip: { ...f.equip, ...slot.equip }, flags: { ...f.flags, ...slot.flags, bosses: Array.isArray(slot.flags?.bosses) ? slot.flags.bosses : [] },
-    settings: { ...f.settings, ...slot.settings }, dex: { ...slot.dex }, bestDepth: { ...slot.bestDepth },
+    settings: { ...f.settings, ...slot.settings, reelSpeed: reelSpeedOf(slot) }, dex: { ...slot.dex }, bestDepth: { ...slot.bestDepth },
     owned: Array.isArray(slot.owned) ? slot.owned : f.owned };
 }
 

@@ -3,7 +3,8 @@ import { CONFIG } from './config.js';
 import { G } from './game.js';
 import { getTilt } from './input.js';
 import { arrowButtons, sawButton } from './ui.js';
-import { createRun, moveRun, contact, sawStep, magnetStep, spotGolden, screenY, PHYS } from './sim.js';
+import { createRun, moveRun, contact, sawStep, magnetStep, spotGolden, screenY, PHYS, reelRiseMult } from './sim.js';
+import { reelSpeedOf } from './save.js';
 import { addButton } from './ui.js';
 import { createSpawner, spawnTo, moveFish, makeFish, makeAllowed, placeGuaranteed, summon, AHEAD } from './fish.js';
 import { BY_ID } from './data/fish.js';
@@ -262,7 +263,7 @@ G.scenes.turn = {
   },
   render(ctx, t) { play.render(ctx, t); text(ctx, 'REEL IT IN!', CONFIG.W / 2, H * 0.5, 56, '#ffd166'); },
 };
-G.scenes.ascent = { ...play, enter() { G.run.mode = 'ascent'; sfx.reelStart(); } };
+G.scenes.ascent = { ...play, enter() { G.run.mode = 'ascent'; G.run.riseMult = reelRiseMult(reelSpeedOf(G.slot)); sfx.reelStart(); } };
 
 // ---- surface: launch + shooting ----
 const gun = () => GUN[G.slot.equip.gun] || GUN.pistol;
